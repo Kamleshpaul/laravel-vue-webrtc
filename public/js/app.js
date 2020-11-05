@@ -3301,6 +3301,20 @@ __webpack_require__.r(__webpack_exports__);
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _Layouts_AppLayout__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! @/Layouts/AppLayout */ "./resources/js/Layouts/AppLayout.vue");
+/* harmony import */ var _Jetstream_Modal__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @/Jetstream/Modal */ "./resources/js/Jetstream/Modal.vue");
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 //
 //
 //
@@ -3342,9 +3356,45 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 
+
 /* harmony default export */ __webpack_exports__["default"] = ({
+  props: ["users", "user"],
+  data: function data() {
+    return {
+      caller: null,
+      ModelShow: false
+    };
+  },
   components: {
-    AppLayout: _Layouts_AppLayout__WEBPACK_IMPORTED_MODULE_0__["default"]
+    AppLayout: _Layouts_AppLayout__WEBPACK_IMPORTED_MODULE_0__["default"],
+    Modal: _Jetstream_Modal__WEBPACK_IMPORTED_MODULE_1__["default"]
+  },
+  methods: {
+    startCall: function startCall(id) {
+      if (id == this.user.id) {
+        alert("can't call to own");
+        return false;
+      }
+
+      axios.post(route("start.call"), {
+        id: id,
+        _token: csrfToken
+      }).then(function (_ref) {
+        var data = _ref.data;
+        console.log(data);
+      });
+    },
+    rejectCall: function rejectCall() {
+      this.ModelShow = false;
+    }
+  },
+  mounted: function mounted() {
+    var _this = this;
+
+    Echo.channel("call.".concat(this.user.id)).listen("StartCall", function (e) {
+      _this.caller = e.caller;
+      _this.ModelShow = true;
+    });
   }
 });
 
@@ -31622,121 +31672,72 @@ var render = function() {
               _c("div", { staticClass: "p-5" }, [
                 _c("h1", [_vm._v("Users")]),
                 _vm._v(" "),
-                _c("ul", { staticClass: "flex p-2" }, [
-                  _c(
-                    "li",
-                    {
-                      staticClass:
-                        "bg-gray-500 h-16 w-16  m-4  rounded-full text-white relative cursor-pointer"
-                    },
-                    [
-                      _c(
-                        "span",
-                        {
-                          staticClass:
-                            "absolute top-3 left-6 font-bold text-3xl"
-                        },
-                        [_vm._v("K")]
-                      )
-                    ]
-                  ),
-                  _vm._v(" "),
-                  _c(
-                    "li",
-                    {
-                      staticClass:
-                        "bg-gray-500 h-16 w-16  m-4  rounded-full text-white relative cursor-pointer"
-                    },
-                    [
-                      _c(
-                        "span",
-                        {
-                          staticClass:
-                            "absolute top-3 left-6 font-bold text-3xl"
-                        },
-                        [_vm._v("K")]
-                      )
-                    ]
-                  ),
-                  _vm._v(" "),
-                  _c(
-                    "li",
-                    {
-                      staticClass:
-                        "bg-gray-500 h-16 w-16  m-4  rounded-full text-white relative cursor-pointer"
-                    },
-                    [
-                      _c(
-                        "span",
-                        {
-                          staticClass:
-                            "absolute top-3 left-6 font-bold text-3xl"
-                        },
-                        [_vm._v("K")]
-                      )
-                    ]
-                  ),
-                  _vm._v(" "),
-                  _c(
-                    "li",
-                    {
-                      staticClass:
-                        "bg-gray-500 h-16 w-16  m-4  rounded-full text-white relative cursor-pointer"
-                    },
-                    [
-                      _c(
-                        "span",
-                        {
-                          staticClass:
-                            "absolute top-3 left-6 font-bold text-3xl"
-                        },
-                        [_vm._v("K")]
-                      )
-                    ]
-                  ),
-                  _vm._v(" "),
-                  _c(
-                    "li",
-                    {
-                      staticClass:
-                        "bg-gray-500 h-16 w-16  m-4  rounded-full text-white relative cursor-pointer"
-                    },
-                    [
-                      _c(
-                        "span",
-                        {
-                          staticClass:
-                            "absolute top-3 left-6 font-bold text-3xl"
-                        },
-                        [_vm._v("K")]
-                      )
-                    ]
-                  ),
-                  _vm._v(" "),
-                  _c(
-                    "li",
-                    {
-                      staticClass:
-                        "bg-gray-500 h-16 w-16  m-4  rounded-full text-white relative cursor-pointer"
-                    },
-                    [
-                      _c(
-                        "span",
-                        {
-                          staticClass:
-                            "absolute top-3 left-6 font-bold text-3xl"
-                        },
-                        [_vm._v("K")]
-                      )
-                    ]
-                  )
-                ])
+                _c(
+                  "ul",
+                  { staticClass: "flex p-2" },
+                  _vm._l(_vm.users, function(user) {
+                    return _c(
+                      "li",
+                      {
+                        key: user.id,
+                        staticClass:
+                          "bg-gray-500 h-16 w-16 m-4 rounded-full text-white relative cursor-pointer",
+                        on: {
+                          click: function($event) {
+                            return _vm.startCall(user.id)
+                          }
+                        }
+                      },
+                      [
+                        _c(
+                          "span",
+                          {
+                            staticClass:
+                              "absolute top-3 left-6 font-bold text-3xl"
+                          },
+                          [_vm._v(_vm._s(user.name.charAt(0)))]
+                        )
+                      ]
+                    )
+                  }),
+                  0
+                )
               ])
             ]
           )
         ])
+      ]),
+      _vm._v(" "),
+      _c("Modal", { attrs: { show: _vm.ModelShow } }, [
+        _c("div", { staticClass: "p-5" }, [
+          _c("h2", [
+            _vm._v(_vm._s(_vm.caller ? _vm.caller.name : "") + " is Calling...")
+          ]),
+          _vm._v(" "),
+          _c("div", { staticClass: "flex" }, [
+            _c(
+              "button",
+              {
+                staticClass:
+                  "bg-green-300 hover:bg-green-400 text-green-800 font-bold py-2 px-4 rounded inline-flex items-center text-white m-3"
+              },
+              [_vm._v("\n\t\t\t\t\tAnswer\n\t\t\t\t")]
+            ),
+            _vm._v(" "),
+            _c(
+              "button",
+              {
+                staticClass:
+                  "bg-red-300 hover:bg-red-400 text-red-800 font-bold py-2 px-4 rounded inline-flex items-center text-white m-3",
+                on: { click: _vm.rejectCall }
+              },
+              [_vm._v("\n\t\t\t\t\tReject\n\t\t\t\t")]
+            )
+          ])
+        ])
       ])
-    ]
+    ],
+    1
   )
 }
 var staticRenderFns = []
@@ -47315,6 +47316,7 @@ window._ = __webpack_require__(/*! lodash */ "./node_modules/lodash/lodash.js");
 
 window.axios = __webpack_require__(/*! axios */ "./node_modules/axios/index.js");
 window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+window.csrfToken = document.querySelector("[name='csrf-token']").getAttribute("content");
 /**
  * Echo exposes an expressive API for subscribing to channels and listening
  * for events that are broadcast by Laravel. Echo and event broadcasting
@@ -47325,7 +47327,7 @@ window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 window.Pusher = __webpack_require__(/*! pusher-js */ "./node_modules/pusher-js/dist/web/pusher.js");
 window.Echo = new laravel_echo__WEBPACK_IMPORTED_MODULE_0__["default"]({
   broadcaster: 'pusher',
-  key: "",
+  key: 'broadcast',
   wsHost: window.location.hostname,
   wsPort: 6001,
   forceTLS: false,
@@ -47336,11 +47338,9 @@ window.Echo = new laravel_echo__WEBPACK_IMPORTED_MODULE_0__["default"]({
         axios.post('/api/broadcasting/auth', {
           socket_id: socketId,
           channel_name: channel.name
-        }).then(function (_ref) {
-          var data = _ref.data;
-          callback(false, data);
+        }).then(function (response) {
+          callback(false, response.data);
         })["catch"](function (error) {
-          console.log(error);
           callback(true, error);
         });
       }
