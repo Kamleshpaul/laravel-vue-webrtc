@@ -28,4 +28,5 @@ Route::group(['middleware' => ['auth:sanctum', 'verified']], function () {
     })->name('dashboard');
 
     Route::post('start-call', [CallController::class, 'startCall'])->name('start.call');
+    Route::post('answer-call', [CallController::class, 'AnswerCall'])->name('answer.call');
 });

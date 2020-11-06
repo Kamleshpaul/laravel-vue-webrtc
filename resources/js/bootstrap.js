@@ -27,6 +27,7 @@ window.Echo = new Echo({
     key: 'broadcast',
     wsHost: window.location.hostname,
     wsPort: 6001,
+    enabledTransports: ['ws', 'wss'],
     forceTLS: false,
     disableStats: true,
     authorizer: (channel, options) => {

@@ -10,21 +10,20 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class StartCall implements ShouldBroadcast
+class AnswerCall implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $user, $caller, $data;
+    public $user, $data;
 
     /**
      * Create a new event instance.
      *
      * @return void
      */
-    public function __construct($user, $caller, $data)
+    public function __construct($user, $data)
     {
         $this->user = $user;
-        $this->caller = $caller;
         $this->data = $data;
     }
 
