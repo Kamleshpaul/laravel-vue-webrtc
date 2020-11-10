@@ -20,3 +20,7 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 Broadcast::channel('call.{id}', function ($user) {
     return true;
 });
+
+Broadcast::channel('candidate.{id}', function ($user) {
+    return true;
+});

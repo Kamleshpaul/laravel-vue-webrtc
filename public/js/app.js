@@ -3374,6 +3374,17 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 
 /* harmony default export */ __webpack_exports__["default"] = ({
@@ -3383,7 +3394,9 @@ __webpack_require__.r(__webpack_exports__);
       caller: null,
       ModelShow: false,
       isCallOn: false,
-      offerData: null
+      offerData: null,
+      peerConnection: null,
+      peerConnection2: null
     };
   },
   components: {
@@ -3401,43 +3414,53 @@ __webpack_require__.r(__webpack_exports__);
 
       this.isCallOn = true;
       this.ModelShow = false;
-      var peerConnection = new RTCPeerConnection();
       navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true
       }).then(function (stream) {
-        var video = document.getElementById("myVideo");
+        _this.peerConnection.addStream(stream);
 
-        if ("srcObject" in video) {
-          video.srcObject = stream;
-        } else {
-          video.src = window.URL.createObjectURL(stream);
-        }
-
-        peerConnection.addStream(stream);
-        peerConnection.createOffer().then(function (sdp) {
-          peerConnection.setLocalDescription(sdp);
+        _this.peerConnection.createOffer().then(function (offer) {
+          _this.peerConnection.setLocalDescription(offer);
         }).then(function () {
           axios.post(route("start.call"), {
             id: id,
             _token: csrfToken,
-            data: peerConnection.localDescription
+            data: _this.peerConnection.localDescription
           });
         });
-        video.play();
       })["catch"](function (err) {
         console.log(err);
         alert("Access denied");
         _this.isCallOn = false;
       });
+
+      this.peerConnection.onicecandidate = function (e) {
+        if (e.candidate) {
+          axios.post(route("candidate"), {
+            id: id,
+            _token: csrfToken,
+            data: e.candidate
+          });
+          console.log("send to ice peer to 2");
+        }
+      };
+
+      this.peerConnection.onaddstream = function (stream) {
+        var video = document.getElementById("myVideo");
+        video.srcObject = stream;
+      };
+
       Echo.channel("call.".concat(id)).listen("AnswerCall", function (e) {
-        peerConnection.setRemoteDescription(e.data);
+        _this.peerConnection.setRemoteDescription(new RTCSessionDescription(e.data));
       });
     },
     rejectCall: function rejectCall() {
       this.ModelShow = false;
     },
     AnswerCall: function AnswerCall(user) {
+      var _this2 = this;
+
       this.isCallOn = true;
       this.ModelShow = false;
 
@@ -3445,44 +3468,53 @@ __webpack_require__.r(__webpack_exports__);
         alert("Bad Offer");
       }
 
-      console.log(this.offerData);
-      var peerConnection2 = new RTCPeerConnection();
-      peerConnection2.setRemoteDescription(this.offerData).then(function () {
-        peerConnection2.createAnswer();
-      }).then(function (sdp) {
-        peerConnection2.setLocalDescription(spd);
+      var offer = new RTCSessionDescription(this.offerData);
+      console.log(offer);
+      this.peerConnection2.setRemoteDescription(offer).then(function () {
+        _this2.peerConnection2.createAnswer();
+      }).then(function (answer) {
+        _this2.peerConnection2.setLocalDescription(answer);
       }).then(function (data) {
         axios.post(route("answer.call"), {
           id: user.id,
           _token: csrfToken,
-          data: peerConnection2.localDescription
+          data: _this2.peerConnection2.localDescription
         });
       });
-
-      peerConnection2.onaddstream = function (e) {
-        var video = document.getElementById("otherVideo");
-
-        if ("srcObject" in video) {
-          video.srcObject = e.stream;
-        } else {
-          video.src = window.URL.createObjectURL(e.stream);
-        }
-
-        video.play();
-      };
     },
     EndCall: function EndCall() {
       this.isCallOn = false;
     }
   },
   mounted: function mounted() {
-    var _this2 = this;
+    var _this3 = this;
 
+    var config = {
+      iceServers: [{
+        urls: ["stun:stun.l.google.com:19302"]
+      }]
+    };
+    this.peerConnection = new RTCPeerConnection(config);
+    this.peerConnection2 = new RTCPeerConnection(config);
     Echo.channel("call.".concat(this.user.id)).listen("StartCall", function (e) {
-      _this2.caller = e.caller;
-      _this2.offerData = e.data;
-      _this2.ModelShow = true;
+      _this3.caller = e.caller;
+      _this3.offerData = e.data;
+      _this3.ModelShow = true;
     });
+    Echo.channel("candidate.".concat(this.user.id)).listen("sendCandidate", function (e) {
+      var c = new RTCIceCandidate(e.data);
+
+      _this3.peerConnection2.addIceCandidate(c.candidate);
+
+      console.log("set to ice peer 2", c);
+    });
+
+    this.peerConnection2.onaddstream = function (e) {
+      if (e.stream) {
+        var video = document.getElementById("otherVideo");
+        video.srcObject = e.stream;
+      }
+    };
   }
 });
 
@@ -32488,9 +32520,21 @@ var render = function() {
           _c("h2", [_vm._v("Video Room")]),
           _vm._v(" "),
           _c("div", { staticClass: "flex" }, [
-            _c("video", { staticClass: "w-1/2", attrs: { id: "myVideo" } }),
+            _c("video", {
+              staticClass: "w-1/2",
+              attrs: {
+                id: "myVideo",
+                playsinline: "",
+                autoplay: "",
+                muted: ""
+              },
+              domProps: { muted: true }
+            }),
             _vm._v(" "),
-            _c("video", { staticClass: "w-1/2", attrs: { id: "otherVideo" } })
+            _c("video", {
+              staticClass: "w-1/2",
+              attrs: { id: "otherVideo", playsinline: "", autoplay: "" }
+            })
           ]),
           _vm._v(" "),
           _c(

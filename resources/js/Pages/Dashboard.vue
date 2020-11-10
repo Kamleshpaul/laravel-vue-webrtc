@@ -55,8 +55,19 @@
 			<div class="p-5">
 				<h2>Video Room</h2>
 				<div class="flex">
-					<video id="myVideo" class="w-1/2"></video>
-					<video id="otherVideo" class="w-1/2"></video>
+					<video
+						id="myVideo"
+						playsinline
+						autoplay
+						muted
+						class="w-1/2"
+					></video>
+					<video
+						id="otherVideo"
+						playsinline
+						autoplay
+						class="w-1/2"
+					></video>
 				</div>
 
 				<button
@@ -82,6 +93,8 @@ export default {
 			ModelShow: false,
 			isCallOn: false,
 			offerData: null,
+			peerConnection: null,
+			peerConnection2: null,
 		};
 	},
 	components: {
@@ -97,30 +110,22 @@ export default {
 			}
 			this.isCallOn = true;
 			this.ModelShow = false;
-			const peerConnection = new RTCPeerConnection();
 			navigator.mediaDevices
 				.getUserMedia({ video: true, audio: true })
 				.then((stream) => {
-					let video = document.getElementById("myVideo");
-					if ("srcObject" in video) {
-						video.srcObject = stream;
-					} else {
-						video.src = window.URL.createObjectURL(stream);
-					}
-					peerConnection.addStream(stream);
-					peerConnection
+					this.peerConnection.addStream(stream);
+					this.peerConnection
 						.createOffer()
-						.then((sdp) => {
-							peerConnection.setLocalDescription(sdp);
+						.then((offer) => {
+							this.peerConnection.setLocalDescription(offer);
 						})
 						.then(() => {
 							axios.post(route("start.call"), {
 								id,
 								_token: csrfToken,
-								data: peerConnection.localDescription,
+								data: this.peerConnection.localDescription,
 							});
 						});
-					video.play();
 				})
 				.catch((err) => {
 					console.log(err);
@@ -128,8 +133,26 @@ export default {
 					this.isCallOn = false;
 				});
 
+			this.peerConnection.onicecandidate = function (e) {
+				if (e.candidate) {
+					axios.post(route("candidate"), {
+						id,
+						_token: csrfToken,
+						data: e.candidate,
+					});
+					console.log("send to ice peer to 2");
+				}
+			};
+
+			this.peerConnection.onaddstream = function (stream) {
+				let video = document.getElementById("myVideo");
+				video.srcObject = stream;
+			};
+
 			Echo.channel(`call.${id}`).listen("AnswerCall", (e) => {
-				peerConnection.setRemoteDescription(e.data);
+				this.peerConnection.setRemoteDescription(
+					new RTCSessionDescription(e.data)
+				);
 			});
 		},
 
@@ -144,33 +167,24 @@ export default {
 			if (!this.offerData) {
 				alert("Bad Offer");
 			}
-			console.log(this.offerData);
-			const peerConnection2 = new RTCPeerConnection();
-			peerConnection2
-				.setRemoteDescription(this.offerData)
+			const offer = new RTCSessionDescription(this.offerData);
+			console.log(offer);
+
+			this.peerConnection2
+				.setRemoteDescription(offer)
 				.then(() => {
-					peerConnection2.createAnswer();
+					this.peerConnection2.createAnswer();
 				})
-				.then((sdp) => {
-					peerConnection2.setLocalDescription(spd);
+				.then((answer) => {
+					this.peerConnection2.setLocalDescription(answer);
 				})
 				.then((data) => {
 					axios.post(route("answer.call"), {
 						id: user.id,
 						_token: csrfToken,
-						data: peerConnection2.localDescription,
+						data: this.peerConnection2.localDescription,
 					});
 				});
-
-			peerConnection2.onaddstream = (e) => {
-				let video = document.getElementById("otherVideo");
-				if ("srcObject" in video) {
-					video.srcObject = e.stream;
-				} else {
-					video.src = window.URL.createObjectURL(e.stream);
-				}
-				video.play();
-			};
 		},
 		EndCall() {
 			this.isCallOn = false;
@@ -178,11 +192,38 @@ export default {
 	},
 
 	mounted() {
+		const config = {
+			iceServers: [
+				{
+					urls: ["stun:stun.l.google.com:19302"],
+				},
+			],
+		};
+		this.peerConnection = new RTCPeerConnection(config);
+		this.peerConnection2 = new RTCPeerConnection(config);
+
 		Echo.channel(`call.${this.user.id}`).listen("StartCall", (e) => {
 			this.caller = e.caller;
 			this.offerData = e.data;
 			this.ModelShow = true;
 		});
+
+		Echo.channel(`candidate.${this.user.id}`).listen(
+			"sendCandidate",
+			(e) => {
+				const c = new RTCIceCandidate(e.data);
+
+				this.peerConnection2.addIceCandidate(c.candidate);
+				console.log("set to ice peer 2", c);
+			}
+		);
+
+		this.peerConnection2.onaddstream = (e) => {
+			if (e.stream) {
+				let video = document.getElementById("otherVideo");
+				video.srcObject = e.stream;
+			}
+		};
 	},
 };
 </script>
