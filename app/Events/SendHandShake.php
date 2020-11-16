@@ -10,20 +10,21 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class sendCandidate implements ShouldBroadcast
+class SendHandShake implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $user, $data;
+    public $data, $senderId, $reciverId;
 
     /**
      * Create a new event instance.
      *
      * @return void
      */
-    public function __construct($user, $data)
+    public function __construct($senderId, $reciverId, $data)
     {
-        $this->user = $user;
+        $this->senderId = $senderId;
+        $this->reciverId = $reciverId;
         $this->data = $data;
     }
 
@@ -34,6 +35,6 @@ class sendCandidate implements ShouldBroadcast
      */
     public function broadcastOn()
     {
-        return new channel('candidate.' . $this->user->id);
+        return new channel('handshake.' . $this->reciverId);
     }
 }

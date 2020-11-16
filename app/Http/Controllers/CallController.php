@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Events\AnswerCall;
-use App\Events\sendCandidate;
+use App\Events\SendHandShake;
 use App\Events\StartCall;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -32,14 +32,13 @@ class CallController extends Controller
         ]);
     }
 
-    public function candidate(Request $request)
+    public function handshake(Request $request)
     {
-        $user = User::findOrFail($request->id);
-        event(new sendCandidate($user, $request->data));
+        event(new SendHandShake($request->senderId, $request->reciverId, $request->data));
 
         return response([
             "status" => true,
-            "message" => "candidate send.."
+            "message" => "handshake send.."
         ]);
     }
 }

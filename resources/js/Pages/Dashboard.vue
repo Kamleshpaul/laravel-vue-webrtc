@@ -93,8 +93,9 @@ export default {
 			ModelShow: false,
 			isCallOn: false,
 			offerData: null,
-			peerConnection: null,
-			peerConnection2: null,
+			localConnection: null,
+			remoteConnection: null,
+			offer: null,
 		};
 	},
 	components: {
@@ -108,122 +109,96 @@ export default {
 				alert("can't call to own");
 				return false;
 			}
-			this.isCallOn = true;
-			this.ModelShow = false;
-			navigator.mediaDevices
-				.getUserMedia({ video: true, audio: true })
-				.then((stream) => {
-					this.peerConnection.addStream(stream);
-					this.peerConnection
-						.createOffer()
-						.then((offer) => {
-							this.peerConnection.setLocalDescription(offer);
-						})
-						.then(() => {
-							axios.post(route("start.call"), {
-								id,
-								_token: csrfToken,
-								data: this.peerConnection.localDescription,
-							});
-						});
-				})
-				.catch((err) => {
-					console.log(err);
-					alert("Access denied");
-					this.isCallOn = false;
-				});
 
-			this.peerConnection.onicecandidate = function (e) {
-				if (e.candidate) {
-					axios.post(route("candidate"), {
-						id,
-						_token: csrfToken,
-						data: e.candidate,
-					});
-					console.log("send to ice peer to 2");
-				}
-			};
-
-			this.peerConnection.onaddstream = function (stream) {
-				let video = document.getElementById("myVideo");
-				video.srcObject = stream;
-			};
-
-			Echo.channel(`call.${id}`).listen("AnswerCall", (e) => {
-				this.peerConnection.setRemoteDescription(
-					new RTCSessionDescription(e.data)
+			this.localConnection = new RTCPeerConnection();
+			this.localConnection.onicecandidate = (e) => {
+				this.offer = JSON.stringify(
+					this.localConnection.localDescription
 				);
-			});
+			};
+
+			setTimeout(() => {
+				console.log("send offer");
+				axios.post(route("handshake"), {
+					senderId: this.user.id,
+					reciverId: id,
+					_token: csrfToken,
+					data: this.offer,
+				});
+			}, 1000);
+			const channel = this.localConnection.createDataChannel("dcc");
+			channel.onmessage = (e) =>
+				console.log("messsage received!!!" + e.data);
+			channel.onopen = (e) => {
+				console.log("open!!!!")
+				console.log("stream",channel.stream);
+			};
+			channel.onclose = (e) => console.log("closed!!!!!!");
+
+			this.localConnection
+				.createOffer()
+				.then((o) => this.localConnection.setLocalDescription(o));
 		},
 
 		rejectCall() {
 			this.ModelShow = false;
 		},
 
-		AnswerCall(user) {
-			this.isCallOn = true;
-			this.ModelShow = false;
-
-			if (!this.offerData) {
-				alert("Bad Offer");
-			}
-			const offer = new RTCSessionDescription(this.offerData);
-			console.log(offer);
-
-			this.peerConnection2
+		createRTCOffer(offer, reciverId) {
+			this.remoteConnection = new RTCPeerConnection();
+			this.remoteConnection.ondatachannel = (e) => {
+				const receiveChannel = event.channel;
+				receiveChannel.onmessage = (e) =>
+					console.log("messsage received!!!" + e.data);
+				receiveChannel.onopen = (e) => console.log("open!!!!");
+				receiveChannel.onclose = (e) => console.log("closed!!!!!!");
+				this.remoteConnection.channel = receiveChannel;
+			};
+			this.remoteConnection
 				.setRemoteDescription(offer)
-				.then(() => {
-					this.peerConnection2.createAnswer();
-				})
-				.then((answer) => {
-					this.peerConnection2.setLocalDescription(answer);
-				})
-				.then((data) => {
-					axios.post(route("answer.call"), {
-						id: user.id,
+				.then((a) => console.log("remote offer accept"));
+
+			//create answer
+			this.remoteConnection
+				.createAnswer()
+				.then((a) => this.remoteConnection.setLocalDescription(a))
+				.then((a) => {
+					console.log("sent answer");
+					axios.post(route("handshake"), {
+						senderId: this.user.id,
+						reciverId: reciverId,
 						_token: csrfToken,
-						data: this.peerConnection2.localDescription,
+						data: JSON.stringify(
+							this.remoteConnection.localDescription
+						),
 					});
 				});
 		},
+
+		AnswerCall(user) {},
 		EndCall() {
 			this.isCallOn = false;
 		},
 	},
 
 	mounted() {
-		const config = {
-			iceServers: [
-				{
-					urls: ["stun:stun.l.google.com:19302"],
-				},
-			],
-		};
-		this.peerConnection = new RTCPeerConnection(config);
-		this.peerConnection2 = new RTCPeerConnection(config);
-
-		Echo.channel(`call.${this.user.id}`).listen("StartCall", (e) => {
-			this.caller = e.caller;
-			this.offerData = e.data;
-			this.ModelShow = true;
-		});
-
-		Echo.channel(`candidate.${this.user.id}`).listen(
-			"sendCandidate",
+		Echo.channel(`handshake.${this.user.id}`).listen(
+			"SendHandShake",
 			(e) => {
-				const c = new RTCIceCandidate(e.data);
+				const data = JSON.parse(e.data);
+				if (data.type == "offer") {
+					const offer = data;
 
-				this.peerConnection2.addIceCandidate(c.candidate);
-				console.log("set to ice peer 2", c);
+					this.createRTCOffer(offer, e.senderId);
+				} else {
+					const answer = data;
+					console.log("accept  answer");
+					this.localConnection
+						.setRemoteDescription(answer)
+						.then((a) => console.log("final done"));
+				}
 			}
 		);
-
-		this.peerConnection2.onaddstream = (e) => {
-			if (e.stream) {
-				let video = document.getElementById("otherVideo");
-				video.srcObject = e.stream;
-			}
-		};
 	},
 };
 </script>

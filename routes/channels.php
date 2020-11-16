@@ -21,6 +21,6 @@ Broadcast::channel('call.{id}', function ($user) {
     return true;
 });
 
-Broadcast::channel('candidate.{id}', function ($user) {
+Broadcast::channel('handshake.{id}', function ($user) {
     return true;
 });
