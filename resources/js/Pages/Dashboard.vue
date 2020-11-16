@@ -53,7 +53,7 @@
 
 		<Modal :show="isCallOn">
 			<div class="p-5">
-				<h2>Video Room</h2>
+				<h2>Video Chat</h2>
 				<div class="flex">
 					<video
 						id="myVideo"
@@ -109,14 +109,14 @@ export default {
 				alert("can't call to own");
 				return false;
 			}
+			this.isCallOn = true;
+			this.ModelShow = false;
 
-			this.localConnection = new RTCPeerConnection();
 			this.localConnection.onicecandidate = (e) => {
 				this.offer = JSON.stringify(
 					this.localConnection.localDescription
 				);
 			};
-
 			setTimeout(() => {
 				console.log("send offer");
 				axios.post(route("handshake"), {
@@ -126,14 +126,6 @@ export default {
 					data: this.offer,
 				});
 			}, 1000);
-			const channel = this.localConnection.createDataChannel("dcc");
-			channel.onmessage = (e) =>
-				console.log("messsage received!!!" + e.data);
-			channel.onopen = (e) => {
-				console.log("open!!!!")
-				console.log("stream",channel.stream);
-			};
-			channel.onclose = (e) => console.log("closed!!!!!!");
 
 			this.localConnection
 				.createOffer()
@@ -145,15 +137,9 @@ export default {
 		},
 
 		createRTCOffer(offer, reciverId) {
-			this.remoteConnection = new RTCPeerConnection();
-			this.remoteConnection.ondatachannel = (e) => {
-				const receiveChannel = event.channel;
-				receiveChannel.onmessage = (e) =>
-					console.log("messsage received!!!" + e.data);
-				receiveChannel.onopen = (e) => console.log("open!!!!");
-				receiveChannel.onclose = (e) => console.log("closed!!!!!!");
-				this.remoteConnection.channel = receiveChannel;
-			};
+			this.isCallOn = true;
+			this.ModelShow = false;
+
 			this.remoteConnection
 				.setRemoteDescription(offer)
 				.then((a) => console.log("remote offer accept"));
@@ -178,10 +164,64 @@ export default {
 		AnswerCall(user) {},
 		EndCall() {
 			this.isCallOn = false;
+			this.localConnection.ontrack = null;
+			this.localConnection = null;
+			this.remoteConnection = null;
+		},
+
+		peer1() {
+			this.localConnection = new RTCPeerConnection();
+			const channel = this.localConnection.createDataChannel("dcc");
+			channel.onmessage = (e) =>
+				console.log("messsage received!!!" + e.data);
+			channel.onopen = (e) => {
+				console.log("create open!!!!");
+			};
+			channel.onclose = (e) => console.log("create closed!!!!!!");
+
+			this.remoteConnection = new RTCPeerConnection();
+			this.remoteConnection.ontrack = (e) => {
+				console.log("peer1 reciving video");
+				let video = document.getElementById("otherVideo");
+				video.srcObject = e.streams[0];
+			};
+			navigator.mediaDevices
+				.getUserMedia({ video: true, audio: true })
+				.then((stream) => {
+					let video = document.getElementById("myVideo");
+					video.srcObject = stream;
+
+					stream
+						.getTracks()
+						.forEach((track) =>
+							this.localConnection.addTrack(track, stream)
+						);
+				});
+		},
+
+		peer2() {
+			this.remoteConnection.ondatachannel = (e) => {
+				const receiveChannel = event.channel;
+				receiveChannel.onmessage = (e) =>
+					console.log("messsage received!!!" + e.data);
+				receiveChannel.onopen = (e) => console.log("receiver open!!!!");
+				receiveChannel.onclose = (e) =>
+					console.log("receiver closed!!!!!!");
+				this.remoteConnection.channel = receiveChannel;
+			};
+
+			this.localConnection.ontrack = (e) => {
+				console.log("peer2 reciving video");
+				let video = document.getElementById("otherVideo");
+				video.srcObject = e.streams[0];
+			};
 		},
 	},
 
 	mounted() {
+		this.peer1();
+		this.peer2();
+
 		Echo.channel(`handshake.${this.user.id}`).listen(
 			"SendHandShake",
 			(e) => {
