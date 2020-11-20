@@ -164,27 +164,21 @@ export default {
 		AnswerCall(user) {},
 		EndCall() {
 			this.isCallOn = false;
-			this.localConnection.ontrack = null;
-			this.localConnection = null;
-			this.remoteConnection = null;
+			this.localConnection.close();
+			this.remoteConnection.close();
 		},
 
-		peer1() {
+		init() {
 			this.localConnection = new RTCPeerConnection();
-			const channel = this.localConnection.createDataChannel("dcc");
-			channel.onmessage = (e) =>
-				console.log("messsage received!!!" + e.data);
-			channel.onopen = (e) => {
-				console.log("create open!!!!");
-			};
-			channel.onclose = (e) => console.log("create closed!!!!!!");
-
 			this.remoteConnection = new RTCPeerConnection();
+			window.remoteConnection = this.remoteConnection;
+			// listen for remote video
 			this.remoteConnection.ontrack = (e) => {
 				console.log("peer1 reciving video");
 				let video = document.getElementById("otherVideo");
 				video.srcObject = e.streams[0];
 			};
+			// set track to local video
 			navigator.mediaDevices
 				.getUserMedia({ video: true, audio: true })
 				.then((stream) => {
@@ -198,37 +192,16 @@ export default {
 						);
 				});
 		},
-
-		peer2() {
-			this.remoteConnection.ondatachannel = (e) => {
-				const receiveChannel = event.channel;
-				receiveChannel.onmessage = (e) =>
-					console.log("messsage received!!!" + e.data);
-				receiveChannel.onopen = (e) => console.log("receiver open!!!!");
-				receiveChannel.onclose = (e) =>
-					console.log("receiver closed!!!!!!");
-				this.remoteConnection.channel = receiveChannel;
-			};
-
-			this.localConnection.ontrack = (e) => {
-				console.log("peer2 reciving video");
-				let video = document.getElementById("otherVideo");
-				video.srcObject = e.streams[0];
-			};
-		},
 	},
 
 	mounted() {
-		this.peer1();
-		this.peer2();
-
+		this.init();
 		Echo.channel(`handshake.${this.user.id}`).listen(
 			"SendHandShake",
 			(e) => {
 				const data = JSON.parse(e.data);
 				if (data.type == "offer") {
 					const offer = data;
-
 					this.createRTCOffer(offer, e.senderId);
 				} else {
 					const answer = data;
