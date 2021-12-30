@@ -6,6 +6,7 @@
       </h2>
     </template>
 
+    <audio hidden id="ringtone" src="/skype_phone.mp3"></audio>
     <div class="py-12">
       <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
         <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
@@ -45,7 +46,7 @@
 
         <div class="flex">
           <button
-            @click="answerCall()"
+            @click="answerCall"
             class="
               bg-green-300
               hover:bg-green-400
@@ -99,6 +100,7 @@
             v-show="!message"
             id="otherVideo"
             playsinline
+            muted
             autoplay
             class="w-1/2"
           ></video>
@@ -108,7 +110,7 @@
         </div>
 
         <button
-          @click="EndCall"
+          @click="endCall(true)"
           class="
             bg-red-300
             hover:bg-red-400
@@ -123,7 +125,7 @@
             m-3
           "
         >
-          Close
+          {{ isCallOn ? "End Call" : "Close" }}
         </button>
       </div>
     </Modal>
@@ -165,15 +167,12 @@ export default {
   },
 
   methods: {
-    async startCall(user) {
-			this.caller = user;
-      this.message = "Ringing...";
-      if (user.id == this.user.id) {
-        alert("can't call to own");
-        return false;
+    async setupCall() {
+      const conState = this.PC.connectionState;
+      if (conState == "closed") {
+        this.PC = new RTCPeerConnection(this.servers);
       }
-      this.isCallOn = true;
-      this.ModelShow = false;
+
       try {
         this.localStream = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -182,81 +181,6 @@ export default {
       } catch (error) {
         alert("Web cam access denied.");
       }
-      this.remoteStream = new MediaStream();
-
-      // Push tracks from local stream to peer connection
-      this.localStream.getTracks().forEach((track) => {
-        this.PC.addTrack(track, this.localStream);
-      });
-
-      // Pull tracks from remote stream, add to video stream
-      this.PC.ontrack = (event) => {
-        event.streams[0].getTracks().forEach((track) => {
-          this.remoteStream.addTrack(track);
-        });
-      };
-
-      let video = document.getElementById("myVideo");
-      video.srcObject = this.localStream;
-
-      let otherVideo = document.getElementById("otherVideo");
-      otherVideo.srcObject = this.remoteStream;
-
-      //get latest ice candidate and sent to other party
-      this.PC.onicecandidate = (event) => {
-        if (event.candidate) {
-          axios.post(route("handshake"), {
-            senderId: this.user.id,
-            reciverId: this.caller.d,
-            _token: csrfToken,
-            data: JSON.stringify({
-              type: "candidate",
-              data: event.candidate,
-            }),
-          });
-        }
-      };
-
-      // Create offer
-      const offerDescription = await this.PC.createOffer();
-      await this.PC.setLocalDescription(offerDescription);
-
-      const offer = {
-        sdp: offerDescription.sdp,
-        type: offerDescription.type,
-      };
-      axios.post(route("handshake"), {
-        senderId: this.user.id,
-        reciverId: this.caller.id,
-        _token: csrfToken,
-        data: JSON.stringify(offer),
-      });
-    },
-
-    rejectCall() {
-      this.ModelShow = false;
-      axios.post(route("handshake"), {
-        senderId: this.user.id,
-        reciverId: this.caller.id,
-        _token: csrfToken,
-        data: JSON.stringify({
-          type: "reject",
-        }),
-      });
-    },
-
-    async answerCall() {
-      this.isCallOn = true;
-      this.ModelShow = false;
-      try {
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-      } catch (error) {
-        alert("Web cam access denied.");
-      }
-
       this.remoteStream = new MediaStream();
 
       // Push tracks from local stream to peer connection
@@ -291,6 +215,56 @@ export default {
           });
         }
       };
+    },
+    async startCall(user) {
+      this.caller = user;
+      this.message = "Ringing...";
+      if (user.id == this.user.id) {
+        alert("can't call to own");
+        return false;
+      }
+      this.isCallOn = true;
+      this.ModelShow = false;
+
+      await this.setupCall();
+
+      // Create offer
+      const offerDescription = await this.PC.createOffer();
+      await this.PC.setLocalDescription(offerDescription);
+
+      const offer = {
+        sdp: offerDescription.sdp,
+        type: offerDescription.type,
+      };
+      axios.post(route("handshake"), {
+        senderId: this.user.id,
+        reciverId: this.caller.id,
+        _token: csrfToken,
+        data: JSON.stringify(offer),
+      });
+    },
+
+    rejectCall() {
+      this.ModelShow = false;
+      this.message = null;
+
+      // other party notify
+      axios.post(route("handshake"), {
+        senderId: this.user.id,
+        reciverId: this.caller.id,
+        _token: csrfToken,
+        data: JSON.stringify({
+          type: "reject",
+        }),
+      });
+    },
+
+    async answerCall() {
+      this.message = null;
+      this.isCallOn = true;
+      this.ModelShow = false;
+
+      await this.setupCall();
 
       // set offer as local and generate answer
       const offerDescription = this.offerData;
@@ -311,10 +285,10 @@ export default {
       });
     },
 
-    EndCall() {
+    endCall(shouldNotify = false) {
       this.isCallOn = false;
       this.ModelShow = false;
-      console.log("this.caller", this.caller);
+      this.message = null;
 
       this.localStream.getTracks().forEach(function (track) {
         track.stop();
@@ -323,19 +297,24 @@ export default {
         track.stop();
       });
       this.PC.close();
-      axios
-        .post(route("handshake"), {
-          senderId: this.user.id,
-          reciverId: this.caller.id,
-          _token: csrfToken,
-          data: JSON.stringify({
-            type: "endCall",
-            data: null,
-          }),
-        })
-        .then(() => {
-          this.caller = null;
-        });
+
+      if (shouldNotify) {
+        axios
+          .post(route("handshake"), {
+            senderId: this.user.id,
+            reciverId: this.caller.id,
+            _token: csrfToken,
+            data: JSON.stringify({
+              type: "endCall",
+              data: null,
+            }),
+          })
+          .then(() => {
+            this.caller = null;
+          });
+      } else {
+        this.caller = null;
+      }
     },
 
     setOffer(data, offerData) {
@@ -344,13 +323,14 @@ export default {
       this.ModelShow = true;
     },
     async setAnswer(answerData) {
-      console.log("setAnswer");
       this.message = null;
       const answerDescription = new RTCSessionDescription(answerData);
       this.PC.setRemoteDescription(answerDescription);
     },
     setCandidate(candidateData) {
-      this.PC.addIceCandidate(new RTCIceCandidate(candidateData.data));
+      try {
+        this.PC.addIceCandidate(new RTCIceCandidate(candidateData.data));
+      } catch (error) {}
     },
   },
 
@@ -377,19 +357,21 @@ export default {
         }
 
         if (handShakeData.type == "endCall") {
-          console.log("endCall");
-          this.isCallOn = false;
-          this.caller = null;
-          this.localStream.getTracks().forEach(function (track) {
-            track.stop();
-          });
-          this.remoteStream.getTracks().forEach(function (track) {
-            track.stop();
-          });
-          this.PC.close();
+          this.endCall();
         }
       }
     );
+  },
+  watch: {
+    message: (val) => {
+      const audio = document.getElementById("ringtone");
+      if (val == "Ringing...") {
+        audio.play();
+      } else {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+    },
   },
 };
 </script>
