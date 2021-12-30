@@ -5,6 +5,8 @@ This is a one to one video calling app with `Laravel` and `vuejs` using `websock
 ## Prerequisites
 
 - [x] php 8.0 or above
+- [x] MYSQL 8.0
+- [x] COMPOSER
 - [x] Node.js 12.22.0 or above
 
 ## How run the application
