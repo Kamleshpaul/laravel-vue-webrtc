@@ -3455,7 +3455,6 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
 //
 //
 //
-//
 
 
 /* harmony default export */ __webpack_exports__["default"] = ({
@@ -33562,13 +33561,7 @@ var render = function() {
                 }
               ],
               staticClass: "w-1/2",
-              attrs: {
-                id: "otherVideo",
-                playsinline: "",
-                muted: "",
-                autoplay: ""
-              },
-              domProps: { muted: true }
+              attrs: { id: "otherVideo", playsinline: "", autoplay: "" }
             }),
             _vm._v(" "),
             _c(

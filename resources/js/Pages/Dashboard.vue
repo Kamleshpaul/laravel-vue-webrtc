@@ -100,7 +100,6 @@
             v-show="!message"
             id="otherVideo"
             playsinline
-            muted
             autoplay
             class="w-1/2"
           ></video>
