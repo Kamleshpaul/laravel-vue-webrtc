@@ -26,7 +26,7 @@
                   relative
                   cursor-pointer
                 "
-                @click="startCall(row.id)"
+                @click="startCall(row)"
               >
                 <span
                   class="absolute top-3 left-6 font-bold text-3xl adjust-margin"
@@ -45,7 +45,7 @@
 
         <div class="flex">
           <button
-            @click="AnswerCall(caller)"
+            @click="answerCall()"
             class="
               bg-green-300
               hover:bg-green-400
@@ -88,8 +88,23 @@
       <div class="p-5">
         <h2>Video Chat</h2>
         <div class="flex">
-          <video id="myVideo" playsinline autoplay muted class="w-1/2 mr-2"></video>
-          <video id="otherVideo" playsinline autoplay class="w-1/2"></video>
+          <video
+            id="myVideo"
+            playsinline
+            autoplay
+            muted
+            class="w-1/2 mr-2"
+          ></video>
+          <video
+            v-show="!message"
+            id="otherVideo"
+            playsinline
+            autoplay
+            class="w-1/2"
+          ></video>
+          <div v-show="message" class="w-1/2">
+            <p class="p-3">{{ message }}</p>
+          </div>
         </div>
 
         <button
@@ -140,6 +155,8 @@ export default {
       ModelShow: false,
       isCallOn: false,
       caller: null,
+      offerData: null,
+      message: null,
     };
   },
   components: {
@@ -148,8 +165,10 @@ export default {
   },
 
   methods: {
-    async startCall(id) {
-      if (id == this.user.id) {
+    async startCall(user) {
+			this.caller = user;
+      this.message = "Ringing...";
+      if (user.id == this.user.id) {
         alert("can't call to own");
         return false;
       }
@@ -188,7 +207,7 @@ export default {
         if (event.candidate) {
           axios.post(route("handshake"), {
             senderId: this.user.id,
-            reciverId: id,
+            reciverId: this.caller.d,
             _token: csrfToken,
             data: JSON.stringify({
               type: "candidate",
@@ -208,7 +227,7 @@ export default {
       };
       axios.post(route("handshake"), {
         senderId: this.user.id,
-        reciverId: id,
+        reciverId: this.caller.id,
         _token: csrfToken,
         data: JSON.stringify(offer),
       });
@@ -216,20 +235,19 @@ export default {
 
     rejectCall() {
       this.ModelShow = false;
+      axios.post(route("handshake"), {
+        senderId: this.user.id,
+        reciverId: this.caller.id,
+        _token: csrfToken,
+        data: JSON.stringify({
+          type: "reject",
+        }),
+      });
     },
 
-    AnswerCall(user) {},
-    EndCall() {
-      this.isCallOn = false;
-      this.PC.close();
-    },
-
-    async setOffer(data, offerData) {
-      console.log("answering...");
-      this.caller = data.caller;
+    async answerCall() {
       this.isCallOn = true;
-      this.ModelShow = true;
-
+      this.ModelShow = false;
       try {
         this.localStream = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -275,7 +293,7 @@ export default {
       };
 
       // set offer as local and generate answer
-      const offerDescription = offerData;
+      const offerDescription = this.offerData;
       await this.PC.setRemoteDescription(
         new RTCSessionDescription(offerDescription)
       );
@@ -292,10 +310,44 @@ export default {
         data: JSON.stringify(answer),
       });
     },
+
+    EndCall() {
+      this.isCallOn = false;
+      this.ModelShow = false;
+      console.log("this.caller", this.caller);
+
+      this.localStream.getTracks().forEach(function (track) {
+        track.stop();
+      });
+      this.remoteStream.getTracks().forEach(function (track) {
+        track.stop();
+      });
+      this.PC.close();
+      axios
+        .post(route("handshake"), {
+          senderId: this.user.id,
+          reciverId: this.caller.id,
+          _token: csrfToken,
+          data: JSON.stringify({
+            type: "endCall",
+            data: null,
+          }),
+        })
+        .then(() => {
+          this.caller = null;
+        });
+    },
+
+    setOffer(data, offerData) {
+      this.caller = data.caller;
+      this.offerData = offerData;
+      this.ModelShow = true;
+    },
     async setAnswer(answerData) {
+      console.log("setAnswer");
+      this.message = null;
       const answerDescription = new RTCSessionDescription(answerData);
       this.PC.setRemoteDescription(answerDescription);
-      console.log("answer set");
     },
     setCandidate(candidateData) {
       this.PC.addIceCandidate(new RTCIceCandidate(candidateData.data));
@@ -318,6 +370,23 @@ export default {
         }
         if (handShakeData.type == "candidate") {
           this.setCandidate(handShakeData);
+        }
+
+        if (handShakeData.type == "reject") {
+          this.message = "Rejected.";
+        }
+
+        if (handShakeData.type == "endCall") {
+          console.log("endCall");
+          this.isCallOn = false;
+          this.caller = null;
+          this.localStream.getTracks().forEach(function (track) {
+            track.stop();
+          });
+          this.remoteStream.getTracks().forEach(function (track) {
+            track.stop();
+          });
+          this.PC.close();
         }
       }
     );

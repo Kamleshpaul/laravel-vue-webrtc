@@ -3439,6 +3439,21 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 
 /* harmony default export */ __webpack_exports__["default"] = ({
@@ -3456,7 +3471,9 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
       remoteStream: null,
       ModelShow: false,
       isCallOn: false,
-      caller: null
+      caller: null,
+      offerData: null,
+      message: null
     };
   },
   components: {
@@ -3464,7 +3481,7 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
     Modal: _Jetstream_Modal__WEBPACK_IMPORTED_MODULE_2__["default"]
   },
   methods: {
-    startCall: function startCall(id) {
+    startCall: function startCall(user) {
       var _this = this;
 
       return _asyncToGenerator( /*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0___default.a.mark(function _callee() {
@@ -3473,35 +3490,38 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
           while (1) {
             switch (_context.prev = _context.next) {
               case 0:
-                if (!(id == _this.user.id)) {
-                  _context.next = 3;
+                _this.caller = user;
+                _this.message = "Ringing...";
+
+                if (!(user.id == _this.user.id)) {
+                  _context.next = 5;
                   break;
                 }
 
                 alert("can't call to own");
                 return _context.abrupt("return", false);
 
-              case 3:
+              case 5:
                 _this.isCallOn = true;
                 _this.ModelShow = false;
-                _context.prev = 5;
-                _context.next = 8;
+                _context.prev = 7;
+                _context.next = 10;
                 return navigator.mediaDevices.getUserMedia({
                   video: true,
                   audio: true
                 });
 
-              case 8:
+              case 10:
                 _this.localStream = _context.sent;
-                _context.next = 14;
+                _context.next = 16;
                 break;
 
-              case 11:
-                _context.prev = 11;
-                _context.t0 = _context["catch"](5);
+              case 13:
+                _context.prev = 13;
+                _context.t0 = _context["catch"](7);
                 alert("Web cam access denied.");
 
-              case 14:
+              case 16:
                 _this.remoteStream = new MediaStream(); // Push tracks from local stream to peer connection
 
                 _this.localStream.getTracks().forEach(function (track) {
@@ -3524,7 +3544,7 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
                   if (event.candidate) {
                     axios.post(route("handshake"), {
                       senderId: _this.user.id,
-                      reciverId: id,
+                      reciverId: _this.caller.d,
                       _token: csrfToken,
                       data: JSON.stringify({
                         type: "candidate",
@@ -3535,43 +3555,46 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
                 }; // Create offer
 
 
-                _context.next = 24;
+                _context.next = 26;
                 return _this.PC.createOffer();
 
-              case 24:
+              case 26:
                 offerDescription = _context.sent;
-                _context.next = 27;
+                _context.next = 29;
                 return _this.PC.setLocalDescription(offerDescription);
 
-              case 27:
+              case 29:
                 offer = {
                   sdp: offerDescription.sdp,
                   type: offerDescription.type
                 };
                 axios.post(route("handshake"), {
                   senderId: _this.user.id,
-                  reciverId: id,
+                  reciverId: _this.caller.id,
                   _token: csrfToken,
                   data: JSON.stringify(offer)
                 });
 
-              case 29:
+              case 31:
               case "end":
                 return _context.stop();
             }
           }
-        }, _callee, null, [[5, 11]]);
+        }, _callee, null, [[7, 13]]);
       }))();
     },
     rejectCall: function rejectCall() {
       this.ModelShow = false;
+      axios.post(route("handshake"), {
+        senderId: this.user.id,
+        reciverId: this.caller.id,
+        _token: csrfToken,
+        data: JSON.stringify({
+          type: "reject"
+        })
+      });
     },
-    AnswerCall: function AnswerCall(user) {},
-    EndCall: function EndCall() {
-      this.isCallOn = false;
-      this.PC.close();
-    },
-    setOffer: function setOffer(data, offerData) {
+    answerCall: function answerCall() {
       var _this2 = this;
 
       return _asyncToGenerator( /*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0___default.a.mark(function _callee2() {
@@ -3580,28 +3603,26 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
           while (1) {
             switch (_context2.prev = _context2.next) {
               case 0:
-                console.log("answering...");
-                _this2.caller = data.caller;
                 _this2.isCallOn = true;
-                _this2.ModelShow = true;
-                _context2.prev = 4;
-                _context2.next = 7;
+                _this2.ModelShow = false;
+                _context2.prev = 2;
+                _context2.next = 5;
                 return navigator.mediaDevices.getUserMedia({
                   video: true,
                   audio: true
                 });
 
-              case 7:
+              case 5:
                 _this2.localStream = _context2.sent;
-                _context2.next = 13;
+                _context2.next = 11;
                 break;
 
-              case 10:
-                _context2.prev = 10;
-                _context2.t0 = _context2["catch"](4);
+              case 8:
+                _context2.prev = 8;
+                _context2.t0 = _context2["catch"](2);
                 alert("Web cam access denied.");
 
-              case 13:
+              case 11:
                 _this2.remoteStream = new MediaStream(); // Push tracks from local stream to peer connection
 
                 _this2.localStream.getTracks().forEach(function (track) {
@@ -3635,20 +3656,20 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
                 }; // set offer as local and generate answer
 
 
-                offerDescription = offerData;
-                _context2.next = 24;
+                offerDescription = _this2.offerData;
+                _context2.next = 22;
                 return _this2.PC.setRemoteDescription(new RTCSessionDescription(offerDescription));
 
-              case 24:
-                _context2.next = 26;
+              case 22:
+                _context2.next = 24;
                 return _this2.PC.createAnswer();
 
-              case 26:
+              case 24:
                 answerDescription = _context2.sent;
-                _context2.next = 29;
+                _context2.next = 27;
                 return _this2.PC.setLocalDescription(answerDescription);
 
-              case 29:
+              case 27:
                 answer = {
                   type: answerDescription.type,
                   sdp: answerDescription.sdp
@@ -3660,16 +3681,46 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
                   data: JSON.stringify(answer)
                 });
 
-              case 31:
+              case 29:
               case "end":
                 return _context2.stop();
             }
           }
-        }, _callee2, null, [[4, 10]]);
+        }, _callee2, null, [[2, 8]]);
       }))();
     },
-    setAnswer: function setAnswer(answerData) {
+    EndCall: function EndCall() {
       var _this3 = this;
+
+      this.isCallOn = false;
+      this.ModelShow = false;
+      console.log("this.caller", this.caller);
+      this.localStream.getTracks().forEach(function (track) {
+        track.stop();
+      });
+      this.remoteStream.getTracks().forEach(function (track) {
+        track.stop();
+      });
+      this.PC.close();
+      axios.post(route("handshake"), {
+        senderId: this.user.id,
+        reciverId: this.caller.id,
+        _token: csrfToken,
+        data: JSON.stringify({
+          type: "endCall",
+          data: null
+        })
+      }).then(function () {
+        _this3.caller = null;
+      });
+    },
+    setOffer: function setOffer(data, offerData) {
+      this.caller = data.caller;
+      this.offerData = offerData;
+      this.ModelShow = true;
+    },
+    setAnswer: function setAnswer(answerData) {
+      var _this4 = this;
 
       return _asyncToGenerator( /*#__PURE__*/_babel_runtime_regenerator__WEBPACK_IMPORTED_MODULE_0___default.a.mark(function _callee3() {
         var answerDescription;
@@ -3677,13 +3728,13 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
           while (1) {
             switch (_context3.prev = _context3.next) {
               case 0:
+                console.log("setAnswer");
+                _this4.message = null;
                 answerDescription = new RTCSessionDescription(answerData);
 
-                _this3.PC.setRemoteDescription(answerDescription);
+                _this4.PC.setRemoteDescription(answerDescription);
 
-                console.log("answer set");
-
-              case 3:
+              case 4:
               case "end":
                 return _context3.stop();
             }
@@ -3696,22 +3747,42 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
     }
   },
   mounted: function mounted() {
-    var _this4 = this;
+    var _this5 = this;
 
     this.PC = new RTCPeerConnection(this.servers);
     Echo.channel("handshake.".concat(this.user.id)).listen("SendHandShake", function (data) {
       var handShakeData = JSON.parse(data.data);
 
       if (handShakeData.type == "offer") {
-        _this4.setOffer(data, handShakeData);
+        _this5.setOffer(data, handShakeData);
       }
 
       if (handShakeData.type == "answer") {
-        _this4.setAnswer(handShakeData);
+        _this5.setAnswer(handShakeData);
       }
 
       if (handShakeData.type == "candidate") {
-        _this4.setCandidate(handShakeData);
+        _this5.setCandidate(handShakeData);
+      }
+
+      if (handShakeData.type == "reject") {
+        _this5.message = "Rejected.";
+      }
+
+      if (handShakeData.type == "endCall") {
+        console.log("endCall");
+        _this5.isCallOn = false;
+        _this5.caller = null;
+
+        _this5.localStream.getTracks().forEach(function (track) {
+          track.stop();
+        });
+
+        _this5.remoteStream.getTracks().forEach(function (track) {
+          track.stop();
+        });
+
+        _this5.PC.close();
       }
     });
   }
@@ -33415,7 +33486,7 @@ var render = function() {
                           "\n                bg-gray-500\n                h-16\n                w-16\n                m-4\n                rounded-full\n                text-white\n                relative\n                cursor-pointer\n              ",
                         on: {
                           click: function($event) {
-                            return _vm.startCall(row.id)
+                            return _vm.startCall(row)
                           }
                         }
                       },
@@ -33453,7 +33524,7 @@ var render = function() {
                   "\n            bg-green-300\n            hover:bg-green-400\n            text-green-800\n            font-bold\n            py-2\n            px-4\n            rounded\n            inline-flex\n            items-center\n            text-white\n            m-3\n          ",
                 on: {
                   click: function($event) {
-                    return _vm.AnswerCall(_vm.caller)
+                    return _vm.answerCall()
                   }
                 }
               },
@@ -33490,9 +33561,33 @@ var render = function() {
             }),
             _vm._v(" "),
             _c("video", {
+              directives: [
+                {
+                  name: "show",
+                  rawName: "v-show",
+                  value: !_vm.message,
+                  expression: "!message"
+                }
+              ],
               staticClass: "w-1/2",
               attrs: { id: "otherVideo", playsinline: "", autoplay: "" }
-            })
+            }),
+            _vm._v(" "),
+            _c(
+              "div",
+              {
+                directives: [
+                  {
+                    name: "show",
+                    rawName: "v-show",
+                    value: _vm.message,
+                    expression: "message"
+                  }
+                ],
+                staticClass: "w-1/2"
+              },
+              [_c("p", { staticClass: "p-3" }, [_vm._v(_vm._s(_vm.message))])]
+            )
           ]),
           _vm._v(" "),
           _c(
