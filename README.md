@@ -36,10 +36,10 @@ Open [http://localhost:8000](http://localhost:8000) with your browser to see the
 
 # Screen shots
 
-#### Login 
-![Login](./doc/step-1.png)
-#### Registration 
-![register](./doc/step-2.png)
+#### Register
+![register](./doc/step-1.png)
+#### Login
+![login](./doc/step-2.png)
 #### Main Dashboard 
 ![dashboard](./doc/step-3.png)
 
