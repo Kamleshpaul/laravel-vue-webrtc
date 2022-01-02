@@ -6,7 +6,6 @@
       </h2>
     </template>
 
-    <audio hidden id="ringtone" src="/skype_phone.mp3"></audio>
     <div class="py-12">
       <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
         <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
@@ -31,8 +30,12 @@
               >
                 <span
                   class="absolute top-3 left-6 font-bold text-3xl adjust-margin"
-                  >{{ row.name.charAt(0) }}</span
-                >
+                  >{{ row.name.charAt(0) }}
+                </span>
+                <span
+                  class="indicator online"
+                  v-show="onlineUsers.filter((x) => row.id === x).length"
+                ></span>
               </li>
             </ul>
           </div>
@@ -87,45 +90,75 @@
 
     <Modal :show="isCallOn">
       <div class="p-5">
-        <h2>Video Chat</h2>
-        <div class="flex">
+        <div class="flex calling-container relative">
           <video
-            id="myVideo"
+            id="otherVideo"
+            v-show="!message"
             playsinline
+            class="relative rounded"
             autoplay
             muted
-            class="w-1/2 mr-2"
           ></video>
           <video
             v-show="!message"
-            id="otherVideo"
+            id="myVideo"
             playsinline
             autoplay
-            class="w-1/2"
+            class="bg-green absolute bottom-5 right-5 z-20 rounded h-1/5"
           ></video>
-          <div v-show="message" class="w-1/2">
+          <div v-show="message">
             <p class="p-3">{{ message }}</p>
           </div>
         </div>
 
-        <button
-          @click="endCall(true)"
+        <div class="absolute flex controller">
+          <img
+            v-if="!audio"
+            @click="toggleAudio(true)"
+            src="/mic_on.svg"
+            class="h-10 w-10 cursor-pointer mr-2"
+            alt="mute"
+          />
+          <img
+            v-if="audio"
+            @click="toggleAudio(false)"
+            src="/mic_off.svg"
+            class="h-10 w-10 cursor-pointer mr-2"
+            alt="mute"
+          />
+          <img
+            @click="endCall(true)"
+            src="/end-call.svg"
+            class="h-10 w-10 cursor-pointer mr-2"
+            alt="end call"
+          />
+          <img
+            v-if="!video"
+            @click="toggleVideo(true)"
+            src="/camera_on.svg"
+            class="h-10 w-10 cursor-pointer"
+            alt="end call"
+          />
+          <img
+            v-if="video"
+            @click="toggleVideo(false)"
+            src="/camera_off.svg"
+            class="h-10 w-10 cursor-pointer"
+            alt="end call"
+          />
+        </div>
+
+        <i
           class="
-            bg-red-300
-            hover:bg-red-400
-            text-red-800
-            font-bold
-            py-2
-            px-4
-            rounded
-            inline-flex
-            items-center
-            text-white
-            m-3
+            bi bi-arrows-fullscreen
+            absolute
+            top-1
+            right-1
+            shadow-xl
+            cursor-pointer
           "
-        >
-          {{ isCallOn ? "End Call" : "Close" }}
-        </button>
+          @click="fullScreen()"
+        ></i>
       </div>
     </Modal>
   </app-layout>
@@ -158,6 +191,9 @@ export default {
       caller: null,
       offerData: null,
       message: null,
+      onlineUsers: [],
+      audio: true,
+      video: true,
     };
   },
   components: {
@@ -331,44 +367,87 @@ export default {
         this.PC.addIceCandidate(new RTCIceCandidate(candidateData.data));
       } catch (error) {}
     },
+
+    setOnlineUsers() {
+      Echo.join("online-users")
+        .here((res) => {
+          this.onlineUsers = res.map((x) => x.id);
+        })
+        .joining((res) => {
+          this.onlineUsers.push(res.id);
+        })
+        .leaving((res) => {
+          this.onlineUsers = this.onlineUsers.filter((x) => x != res.id);
+        });
+    },
+
+    handShakeing() {
+      Echo.channel(`handshake.${this.user.id}`).listen(
+        "SendHandShake",
+        (data) => {
+          const handShakeData = JSON.parse(data.data);
+
+          //second person got
+          if (handShakeData.type == "offer") {
+            this.setOffer(data, handShakeData);
+          }
+
+          // 1st person got
+          if (handShakeData.type == "answer") {
+            this.setAnswer(handShakeData);
+          }
+
+          //second person got
+          if (handShakeData.type == "candidate") {
+            this.setCandidate(handShakeData);
+          }
+
+          //1st person got
+          if (handShakeData.type == "reject") {
+            this.message = "Rejected.";
+          }
+
+          //anyone can get
+          if (handShakeData.type == "endCall") {
+            this.endCall();
+          }
+        }
+      );
+    },
+    fullScreen() {
+      const element = document.querySelector(".calling-container");
+      element.requestFullscreen();
+    },
+    toggleVideo(status) {
+      this.video = status;
+      const videoTrack = this.localStream
+        .getTracks()
+        .find((track) => track.kind === "video");
+
+      videoTrack.enabled = status;
+    },
+    toggleAudio(status) {
+      this.audio = status;
+
+      const videoTrack = this.localStream
+        .getTracks()
+        .find((track) => track.kind === "audio");
+
+      videoTrack.enabled = status;
+    },
   },
 
   mounted() {
     this.PC = new RTCPeerConnection(this.servers);
-
-    Echo.channel(`handshake.${this.user.id}`).listen(
-      "SendHandShake",
-      (data) => {
-        const handShakeData = JSON.parse(data.data);
-        if (handShakeData.type == "offer") {
-          this.setOffer(data, handShakeData);
-        }
-
-        if (handShakeData.type == "answer") {
-          this.setAnswer(handShakeData);
-        }
-        if (handShakeData.type == "candidate") {
-          this.setCandidate(handShakeData);
-        }
-
-        if (handShakeData.type == "reject") {
-          this.message = "Rejected.";
-        }
-
-        if (handShakeData.type == "endCall") {
-          this.endCall();
-        }
-      }
-    );
+    this.setOnlineUsers();
+    this.handShakeing();
   },
   watch: {
     message: (val) => {
-      const audio = document.getElementById("ringtone");
       if (val == "Ringing...") {
-        audio.play();
+        // this.playRingTone();
       } else {
-        audio.pause();
-        audio.currentTime = 0;
+        // this.stopRingTone();
       }
     },
   },
@@ -379,5 +458,44 @@ export default {
 <style  scoped>
 .adjust-margin {
   margin-left: -3px;
+}
+
+.indicator.online {
+  background: #28b62c;
+  display: inline-block;
+  position: absolute;
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  right: 0px;
+  bottom: 0px;
+  -webkit-animation: pulse-animation 2s infinite linear;
+}
+@-webkit-keyframes pulse-animation {
+  0% {
+    -webkit-transform: scale(1);
+  }
+  25% {
+    -webkit-transform: scale(1);
+  }
+  50% {
+    -webkit-transform: scale(1.2);
+  }
+  75% {
+    -webkit-transform: scale(1);
+  }
+  100% {
+    -webkit-transform: scale(1);
+  }
+}
+
+.controller {
+  left: 40%;
+  bottom: 3%;
+}
+@media only screen and (max-width: 780px) {
+  .controller {
+    left: 30%;
+  }
 }
 </style>
