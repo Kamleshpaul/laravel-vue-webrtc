@@ -24,3 +24,9 @@ Broadcast::channel('call.{id}', function ($user) {
 Broadcast::channel('handshake.{id}', function ($user) {
     return true;
 });
+
+Broadcast::channel('online-users', function ($user) {
+    return [
+       "id"=> $user->id
+    ];
+});
