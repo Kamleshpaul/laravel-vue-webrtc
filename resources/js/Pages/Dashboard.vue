@@ -113,14 +113,21 @@
 
         <div class="absolute flex controller">
           <img
-            v-if="!audio"
+            v-if="isCallOn"
+            @click="shareScreen"
+            src="/share.svg"
+            class="h-10 w-10 cursor-pointer mr-2"
+            alt="mute"
+          />
+          <img
+            v-if="!audio && isCallOn"
             @click="toggleAudio(true)"
             src="/mic_on.svg"
             class="h-10 w-10 cursor-pointer mr-2"
             alt="mute"
           />
           <img
-            v-if="audio"
+            v-if="audio && isCallOn"
             @click="toggleAudio(false)"
             src="/mic_off.svg"
             class="h-10 w-10 cursor-pointer mr-2"
@@ -133,14 +140,14 @@
             alt="end call"
           />
           <img
-            v-if="!video"
+            v-if="!video && isCallOn"
             @click="toggleVideo(true)"
             src="/camera_on.svg"
             class="h-10 w-10 cursor-pointer"
             alt="end call"
           />
           <img
-            v-if="video"
+            v-if="video && isCallOn"
             @click="toggleVideo(false)"
             src="/camera_off.svg"
             class="h-10 w-10 cursor-pointer"
@@ -194,6 +201,7 @@ export default {
       onlineUsers: [],
       audio: true,
       video: true,
+      senderTrack: null,
     };
   },
   components: {
@@ -220,7 +228,7 @@ export default {
 
       // Push tracks from local stream to peer connection
       this.localStream.getTracks().forEach((track) => {
-        this.PC.addTrack(track, this.localStream);
+        this.senderTrack = this.PC.addTrack(track, this.localStream);
       });
 
       // Pull tracks from remote stream, add to video stream
@@ -435,6 +443,26 @@ export default {
 
       videoTrack.enabled = status;
     },
+    shareScreen() {
+      navigator.mediaDevices
+        .getDisplayMedia({ cursor: true })
+        .then((stream) => {
+          const screenTrack = stream.getTracks()[0];
+
+          let video = document.getElementById("myVideo");
+          video.srcObject = stream;
+          this.senderTrack.replaceTrack(screenTrack);
+
+          screenTrack.onended = () => {
+            const camVideo = this.localStream
+              .getTracks()
+              .find((track) => track.kind === "video");
+
+            this.senderTrack.replaceTrack(camVideo);
+            video.srcObject = this.localStream;
+          };
+        });
+    },
   },
 
   mounted() {
@@ -448,6 +476,13 @@ export default {
         // this.playRingTone();
       } else {
         // this.stopRingTone();
+      }
+    },
+    isCallOn: (val) => {
+      if (val) {
+        window.onbeforeunload = function () {
+          return "are you sure you want to leave ?.";
+        };
       }
     },
   },
@@ -490,7 +525,7 @@ export default {
 }
 
 .controller {
-  left: 40%;
+  left: 35%;
   bottom: 3%;
 }
 @media only screen and (max-width: 780px) {

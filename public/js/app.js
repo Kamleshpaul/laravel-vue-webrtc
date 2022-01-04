@@ -3455,6 +3455,46 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
 
 
 /* harmony default export */ __webpack_exports__["default"] = ({
@@ -3474,7 +3514,11 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
       isCallOn: false,
       caller: null,
       offerData: null,
-      message: null
+      message: null,
+      onlineUsers: [],
+      audio: true,
+      video: true,
+      senderTrack: null
     };
   },
   components: {
@@ -3518,7 +3562,7 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
                 _this.remoteStream = new MediaStream(); // Push tracks from local stream to peer connection
 
                 _this.localStream.getTracks().forEach(function (track) {
-                  _this.PC.addTrack(track, _this.localStream);
+                  _this.senderTrack = _this.PC.addTrack(track, _this.localStream);
                 }); // Pull tracks from remote stream, add to video stream
 
 
@@ -3735,45 +3779,111 @@ function _asyncToGenerator(fn) { return function () { var self = this, args = ar
       try {
         this.PC.addIceCandidate(new RTCIceCandidate(candidateData.data));
       } catch (error) {}
+    },
+    setOnlineUsers: function setOnlineUsers() {
+      var _this6 = this;
+
+      Echo.join("online-users").here(function (res) {
+        _this6.onlineUsers = res.map(function (x) {
+          return x.id;
+        });
+      }).joining(function (res) {
+        _this6.onlineUsers.push(res.id);
+      }).leaving(function (res) {
+        _this6.onlineUsers = _this6.onlineUsers.filter(function (x) {
+          return x != res.id;
+        });
+      });
+    },
+    handShakeing: function handShakeing() {
+      var _this7 = this;
+
+      Echo.channel("handshake.".concat(this.user.id)).listen("SendHandShake", function (data) {
+        var handShakeData = JSON.parse(data.data); //second person got
+
+        if (handShakeData.type == "offer") {
+          _this7.setOffer(data, handShakeData);
+        } // 1st person got
+
+
+        if (handShakeData.type == "answer") {
+          _this7.setAnswer(handShakeData);
+        } //second person got
+
+
+        if (handShakeData.type == "candidate") {
+          _this7.setCandidate(handShakeData);
+        } //1st person got
+
+
+        if (handShakeData.type == "reject") {
+          _this7.message = "Rejected.";
+        } //anyone can get
+
+
+        if (handShakeData.type == "endCall") {
+          _this7.endCall();
+        }
+      });
+    },
+    fullScreen: function fullScreen() {
+      var element = document.querySelector(".calling-container");
+      element.requestFullscreen();
+    },
+    toggleVideo: function toggleVideo(status) {
+      this.video = status;
+      var videoTrack = this.localStream.getTracks().find(function (track) {
+        return track.kind === "video";
+      });
+      videoTrack.enabled = status;
+    },
+    toggleAudio: function toggleAudio(status) {
+      this.audio = status;
+      var videoTrack = this.localStream.getTracks().find(function (track) {
+        return track.kind === "audio";
+      });
+      videoTrack.enabled = status;
+    },
+    shareScreen: function shareScreen() {
+      var _this8 = this;
+
+      navigator.mediaDevices.getDisplayMedia({
+        cursor: true
+      }).then(function (stream) {
+        var screenTrack = stream.getTracks()[0];
+        var video = document.getElementById("myVideo");
+        video.srcObject = stream;
+
+        _this8.senderTrack.replaceTrack(screenTrack);
+
+        screenTrack.onended = function () {
+          var camVideo = _this8.localStream.getTracks().find(function (track) {
+            return track.kind === "video";
+          });
+
+          _this8.senderTrack.replaceTrack(camVideo);
+
+          video.srcObject = _this8.localStream;
+        };
+      });
     }
   },
   mounted: function mounted() {
-    var _this6 = this;
-
     this.PC = new RTCPeerConnection(this.servers);
-    Echo.channel("handshake.".concat(this.user.id)).listen("SendHandShake", function (data) {
-      var handShakeData = JSON.parse(data.data);
-
-      if (handShakeData.type == "offer") {
-        _this6.setOffer(data, handShakeData);
-      }
-
-      if (handShakeData.type == "answer") {
-        _this6.setAnswer(handShakeData);
-      }
-
-      if (handShakeData.type == "candidate") {
-        _this6.setCandidate(handShakeData);
-      }
-
-      if (handShakeData.type == "reject") {
-        _this6.message = "Rejected.";
-      }
-
-      if (handShakeData.type == "endCall") {
-        _this6.endCall();
-      }
-    });
+    this.setOnlineUsers();
+    this.handShakeing();
   },
   watch: {
     message: function message(val) {
-      var audio = document.getElementById("ringtone");
-
-      if (val == "Ringing...") {
-        audio.play();
-      } else {
-        audio.pause();
-        audio.currentTime = 0;
+      if (val == "Ringing...") {// this.playRingTone();
+      } else {// this.stopRingTone();
+        }
+    },
+    isCallOn: function isCallOn(val) {
+      if (val) {
+        window.onbeforeunload = function () {
+          return "are you sure you want to leave ?.";
+        };
       }
     }
   }
@@ -4577,7 +4687,7 @@ exports = module.exports = __webpack_require__(/*! ../../../node_modules/css-loa
 
 
 // module
-exports.push([module.i, ".adjust-margin[data-v-097ba13b] {\n  margin-left: -3px;\n}\n", ""]);
+exports.push([module.i, ".adjust-margin[data-v-097ba13b] {\n  margin-left: -3px;\n}\n.indicator.online[data-v-097ba13b] {\n  background: #28b62c;\n  display: inline-block;\n  position: absolute;\n  width: 1em;\n  height: 1em;\n  border-radius: 50%;\n  right: 0px;\n  bottom: 0px;\n  -webkit-animation: pulse-animation-data-v-097ba13b 2s infinite linear;\n}\n@-webkit-keyframes pulse-animation-data-v-097ba13b {\n0% {\n    -webkit-transform: scale(1);\n}\n25% {\n    -webkit-transform: scale(1);\n}\n50% {\n    -webkit-transform: scale(1.2);\n}\n75% {\n    -webkit-transform: scale(1);\n}\n100% {\n    -webkit-transform: scale(1);\n}\n}\n.controller[data-v-097ba13b] {\n  left: 35%;\n  bottom: 3%;\n}\n@media only screen and (max-width: 780px) {\n.controller[data-v-097ba13b] {\n    left: 30%;\n}\n}\n", ""]);
 
 // exports
 
@@ -33448,10 +33558,6 @@ var render = function() {
     },
     [
       _vm._v(" "),
-      _c("audio", {
-        attrs: { hidden: "", id: "ringtone", src: "/skype_phone.mp3" }
-      }),
-      _vm._v(" "),
       _c("div", { staticClass: "py-12" }, [
         _c("div", { staticClass: "max-w-7xl mx-auto sm:px-6 lg:px-8" }, [
           _c(
@@ -33492,8 +33598,27 @@ var render = function() {
                             staticClass:
                               "absolute top-3 left-6 font-bold text-3xl adjust-margin"
                           },
-                          [_vm._v(_vm._s(row.name.charAt(0)))]
-                        )
+                          [
+                            _vm._v(
+                              _vm._s(row.name.charAt(0)) + "\n              "
+                            )
+                          ]
+                        ),
+                        _vm._v(" "),
+                        _c("span", {
+                          directives: [
+                            {
+                              name: "show",
+                              rawName: "v-show",
+                              value: _vm.onlineUsers.filter(function(x) {
+                                return row.id === x
+                              }).length,
+                              expression:
+                                "onlineUsers.filter((x) => row.id === x).length"
+                            }
+                          ],
+                          staticClass: "indicator online"
+                        })
                       ]
                     )
                   }),
@@ -33537,13 +33662,19 @@ var render = function() {
       _vm._v(" "),
       _c("Modal", { attrs: { show: _vm.isCallOn } }, [
         _c("div", { staticClass: "p-5" }, [
-          _c("h2", [_vm._v("Video Chat")]),
-          _vm._v(" "),
-          _c("div", { staticClass: "flex" }, [
+          _c("div", { staticClass: "flex calling-container relative" }, [
             _c("video", {
-              staticClass: "w-1/2 mr-2",
+              directives: [
+                {
+                  name: "show",
+                  rawName: "v-show",
+                  value: !_vm.message,
+                  expression: "!message"
+                }
+              ],
+              staticClass: "relative rounded",
               attrs: {
-                id: "myVideo",
+                id: "otherVideo",
                 playsinline: "",
                 autoplay: "",
                 muted: ""
@@ -33560,8 +33691,9 @@ var render = function() {
                   expression: "!message"
                 }
               ],
-              staticClass: "w-1/2",
-              attrs: { id: "otherVideo", playsinline: "", autoplay: "" }
+              staticClass:
+                "bg-green absolute bottom-5 right-5 z-20 rounded h-1/5",
+              attrs: { id: "myVideo", playsinline: "", autoplay: "" }
             }),
             _vm._v(" "),
             _c(
@@ -33574,32 +33706,89 @@ var render = function() {
                     value: _vm.message,
                     expression: "message"
                   }
-                ],
-                staticClass: "w-1/2"
+                ]
               },
               [_c("p", { staticClass: "p-3" }, [_vm._v(_vm._s(_vm.message))])]
             )
           ]),
           _vm._v(" "),
-          _c(
-            "button",
-            {
-              staticClass:
-                "\n          bg-red-300\n          hover:bg-red-400\n          text-red-800\n          font-bold\n          py-2\n          px-4\n          rounded\n          inline-flex\n          items-center\n          text-white\n          m-3\n        ",
+          _c("div", { staticClass: "absolute flex controller" }, [
+            _vm.isCallOn
+              ? _c("img", {
+                  staticClass: "h-10 w-10 cursor-pointer mr-2",
+                  attrs: { src: "/share.svg", alt: "mute" },
+                  on: { click: _vm.shareScreen }
+                })
+              : _vm._e(),
+            _vm._v(" "),
+            !_vm.audio && _vm.isCallOn
+              ? _c("img", {
+                  staticClass: "h-10 w-10 cursor-pointer mr-2",
+                  attrs: { src: "/mic_on.svg", alt: "mute" },
+                  on: {
+                    click: function($event) {
+                      return _vm.toggleAudio(true)
+                    }
+                  }
+                })
+              : _vm._e(),
+            _vm._v(" "),
+            _vm.audio && _vm.isCallOn
+              ? _c("img", {
+                  staticClass: "h-10 w-10 cursor-pointer mr-2",
+                  attrs: { src: "/mic_off.svg", alt: "mute" },
+                  on: {
+                    click: function($event) {
+                      return _vm.toggleAudio(false)
+                    }
+                  }
+                })
+              : _vm._e(),
+            _vm._v(" "),
+            _c("img", {
+              staticClass: "h-10 w-10 cursor-pointer mr-2",
+              attrs: { src: "/end-call.svg", alt: "end call" },
               on: {
                 click: function($event) {
                   return _vm.endCall(true)
                 }
               }
-            },
-            [
-              _vm._v(
-                "\n        " +
-                  _vm._s(_vm.isCallOn ? "End Call" : "Close") +
-                  "\n      "
-              )
-            ]
-          )
+            }),
+            _vm._v(" "),
+            !_vm.video && _vm.isCallOn
+              ? _c("img", {
+                  staticClass: "h-10 w-10 cursor-pointer",
+                  attrs: { src: "/camera_on.svg", alt: "end call" },
+                  on: {
+                    click: function($event) {
+                      return _vm.toggleVideo(true)
+                    }
+                  }
+                })
+              : _vm._e(),
+            _vm._v(" "),
+            _vm.video && _vm.isCallOn
+              ? _c("img", {
+                  staticClass: "h-10 w-10 cursor-pointer",
+                  attrs: { src: "/camera_off.svg", alt: "end call" },
+                  on: {
+                    click: function($event) {
+                      return _vm.toggleVideo(false)
+                    }
+                  }
+                })
+              : _vm._e()
+          ]),
+          _vm._v(" "),
+          _c("i", {
+            staticClass:
+              "\n          bi bi-arrows-fullscreen\n          absolute\n          top-1\n          right-1\n          shadow-xl\n          cursor-pointer\n        ",
+            on: {
+              click: function($event) {
+                return _vm.fullScreen()
+              }
+            }
+          })
         ])
       ])
     ],
@@ -49216,21 +49405,7 @@ window.Echo = new laravel_echo__WEBPACK_IMPORTED_MODULE_0__["default"]({
   wsPort: 6001,
   enabledTransports: ['ws', 'wss'],
   forceTLS: false,
-  disableStats: true,
-  authorizer: function authorizer(channel, options) {
-    return {
-      authorize: function authorize(socketId, callback) {
-        axios.post('/api/broadcasting/auth', {
-          socket_id: socketId,
-          channel_name: channel.name
-        }).then(function (response) {
-          callback(false, response.data);
-        })["catch"](function (error) {
-          callback(true, error);
-        });
-      }
-    };
-  }
+  disableStats: true
 });
 
 /***/ }),
