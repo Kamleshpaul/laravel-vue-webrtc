@@ -182,13 +182,22 @@ export default {
       servers: {
         iceServers: [
           {
+            urls: ["stun:bn-turn1.xirsys.com"],
+          },
+          {
+            username:
+              "LpTQzzNnOhyCNV2c-XzFWdQLfX9rjGUb_8A9FR82F59dG-y2bjDkk8hIxh5aEboqAAAAAGHaoB1rYXZpbg==",
+            credential: "2c2be25c-7128-11ec-b2b6-0242ac140004",
             urls: [
-              "stun:stun1.l.google.com:19302",
-              "stun:stun2.l.google.com:19302",
+              "turn:bn-turn1.xirsys.com:80?transport=udp",
+              "turn:bn-turn1.xirsys.com:3478?transport=udp",
+              "turn:bn-turn1.xirsys.com:80?transport=tcp",
+              "turn:bn-turn1.xirsys.com:3478?transport=tcp",
+              "turns:bn-turn1.xirsys.com:443?transport=tcp",
+              "turns:bn-turn1.xirsys.com:5349?transport=tcp",
             ],
           },
         ],
-        iceCandidatePoolSize: 10,
       },
       PC: null,
       localStream: null,

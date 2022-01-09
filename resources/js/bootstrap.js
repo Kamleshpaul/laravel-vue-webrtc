@@ -24,9 +24,9 @@ window.Pusher = require('pusher-js');
 
 window.Echo = new Echo({
     broadcaster: 'pusher',
-    key: 'broadcast',
-    wsHost: window.location.hostname,
-    wsPort: 6001,
+    key: process.env.MIX_PUSHER_APP_KEY,
+    wsHost: process.env.MIX_PUSHER_APP_HOST || window.location.hostname,
+    wsPort: process.env.MIX_PUSHER_APP_HOST === undefined ? 6001 : "",
     enabledTransports: ['ws', 'wss'],
     forceTLS: false,
     disableStats: true
