@@ -91,6 +91,9 @@
     <Modal :show="isCallOn">
       <div class="p-5">
         <div class="flex calling-container relative">
+          <h3>Duration: {{ msToTime(duration) }}</h3>
+        </div>
+        <div class="flex calling-container relative">
           <video
             id="otherVideo"
             v-show="!message"
@@ -103,7 +106,7 @@
             id="myVideo"
             playsinline
             autoplay
-             muted
+            muted
             class="bg-green absolute bottom-5 right-5 z-20 rounded h-1/5"
           ></video>
           <div v-show="message">
@@ -211,6 +214,8 @@ export default {
       audio: true,
       video: true,
       senderTrack: null,
+      duration: null,
+      interval: null,
     };
   },
   components: {
@@ -220,8 +225,7 @@ export default {
 
   methods: {
     async setupCall() {
-      const conState = this.PC.connectionState;
-      if (conState == "closed") {
+      if (this.PC.connectionState == "closed") {
         this.PC = new RTCPeerConnection(this.servers);
       }
 
@@ -242,9 +246,11 @@ export default {
 
       // Pull tracks from remote stream, add to video stream
       this.PC.ontrack = (event) => {
-        event.streams[0].getTracks().forEach((track) => {
-          this.remoteStream.addTrack(track);
-        });
+        if (event.streams) {
+          event.streams[0].getTracks().forEach((track) => {
+            this.remoteStream.addTrack(track);
+          });
+        }
       };
 
       let video = document.getElementById("myVideo");
@@ -270,7 +276,7 @@ export default {
     },
     async startCall(user) {
       this.caller = user;
-      this.message = "Ringing...";
+
       if (user.id == this.user.id) {
         alert("can't call to own");
         return false;
@@ -284,6 +290,7 @@ export default {
       const offerDescription = await this.PC.createOffer();
       await this.PC.setLocalDescription(offerDescription);
 
+      this.message = "Calling...";
       const offer = {
         sdp: offerDescription.sdp,
         type: offerDescription.type,
@@ -323,8 +330,10 @@ export default {
       await this.PC.setRemoteDescription(
         new RTCSessionDescription(offerDescription)
       );
+
       const answerDescription = await this.PC.createAnswer();
       await this.PC.setLocalDescription(answerDescription);
+
       const answer = {
         type: answerDescription.type,
         sdp: answerDescription.sdp,
@@ -342,12 +351,20 @@ export default {
       this.ModelShow = false;
       this.message = null;
 
-      this.localStream.getTracks().forEach(function (track) {
-        track.stop();
-      });
-      this.remoteStream.getTracks().forEach(function (track) {
-        track.stop();
-      });
+      if (this.localStream) {
+        this.localStream.getTracks().forEach(function (track) {
+          track.stop();
+        });
+      }
+
+      if (this.remoteStream) {
+        this.remoteStream.getTracks().forEach(function (track) {
+          track.stop();
+        });
+      }
+
+      clearInterval(this.interval);
+
       this.PC.close();
 
       if (shouldNotify) {
@@ -380,9 +397,9 @@ export default {
       this.PC.setRemoteDescription(answerDescription);
     },
     setCandidate(candidateData) {
-      try {
-        this.PC.addIceCandidate(new RTCIceCandidate(candidateData.data));
-      } catch (error) {}
+      candidateData.data
+        ? this.PC.addIceCandidate(new RTCIceCandidate(candidateData.data))
+        : "";
     },
 
     setOnlineUsers() {
@@ -398,6 +415,17 @@ export default {
         });
     },
 
+    msToTime(s) {
+      // Pad to 2 or 3 digits, default is 2
+      var pad = (n, z = 2) => ("00" + n).slice(-z);
+      return (
+        pad((s / 3.6e6) | 0) +
+        ":" +
+        pad(((s % 3.6e6) / 6e4) | 0) +
+        ":" +
+        pad(((s % 6e4) / 1000) | 0)
+      );
+    },
     handShakeing() {
       Echo.channel(`handshake.${this.user.id}`).listen(
         "SendHandShake",
@@ -407,6 +435,16 @@ export default {
           //second person got
           if (handShakeData.type == "offer") {
             this.setOffer(data, handShakeData);
+
+            // sent back offer get to show ringing
+            axios.post(route("handshake"), {
+              senderId: this.user.id,
+              reciverId: this.caller.id,
+              _token: csrfToken,
+              data: JSON.stringify({
+                type: "ring",
+              }),
+            });
           }
 
           // 1st person got
@@ -417,6 +455,7 @@ export default {
           //second person got
           if (handShakeData.type == "candidate") {
             this.setCandidate(handShakeData);
+            console.log("candidate", handShakeData);
           }
 
           //1st person got
@@ -427,6 +466,11 @@ export default {
           //anyone can get
           if (handShakeData.type == "endCall") {
             this.endCall();
+          }
+
+          //anyone can get
+          if (handShakeData.type == "ring") {
+            this.message = "Ringing...";
           }
         }
       );
@@ -478,6 +522,45 @@ export default {
     this.PC = new RTCPeerConnection(this.servers);
     this.setOnlineUsers();
     this.handShakeing();
+    this.PC.onconnectionstatechange = (d) => {
+      console.log("this.PC.iceConnectionState", this.PC.iceConnectionState);
+      switch (this.PC.iceConnectionState) {
+        case "connected":
+          const startTime = new Date().getTime();
+          const self = this;
+          this.interval = setInterval(function () {
+            let endTime = new Date().getTime();
+            self.duration = endTime - startTime;
+            console.log("duration [ms] = " + (endTime - startTime));
+          }, 1000);
+
+          console.log("connected..........");
+          break;
+
+        case "disconnected":
+        case "failed":
+          this.endCall(true);
+          if (this.interval) {
+            clearInterval(this.interval);
+          }
+          console.log("disconnected..........");
+
+          break;
+
+        case "closed":
+          this.endCall(true);
+          break;
+      }
+    };
+
+    this.PC.onsignalingstatechange = (d) => {
+      switch (this.PC.signalingState) {
+        case "closed":
+          console.log("Signalling state is 'closed'");
+          console.log("Other user Left");
+          break;
+      }
+    };
   },
   watch: {
     message: (val) => {
