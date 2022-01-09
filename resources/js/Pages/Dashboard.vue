@@ -6,6 +6,7 @@
       </h2>
     </template>
 
+    <audio hidden id="ringtone" src="/skype_phone.mp3"></audio>
     <div class="py-12">
       <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
         <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
@@ -435,7 +436,7 @@ export default {
           //second person got
           if (handShakeData.type == "offer") {
             this.setOffer(data, handShakeData);
-
+            this.message = "Ringing...";
             // sent back offer get to show ringing
             axios.post(route("handshake"), {
               senderId: this.user.id,
@@ -564,10 +565,12 @@ export default {
   },
   watch: {
     message: (val) => {
+      const audio = document.getElementById("ringtone");
       if (val == "Ringing...") {
-        // this.playRingTone();
+        audio.play();
       } else {
-        // this.stopRingTone();
+        audio.pause();
+        audio.currentTime = 0;
       }
     },
     isCallOn: (val) => {
