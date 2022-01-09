@@ -97,13 +97,13 @@
             playsinline
             class="relative rounded"
             autoplay
-            muted
           ></video>
           <video
             v-show="!message"
             id="myVideo"
             playsinline
             autoplay
+             muted
             class="bg-green absolute bottom-5 right-5 z-20 rounded h-1/5"
           ></video>
           <div v-show="message">
