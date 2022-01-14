@@ -94,7 +94,7 @@
         <div class="flex calling-container relative">
           <h3>Duration: {{ msToTime(duration) }}</h3>
         </div>
-        <div class="flex calling-container relative">
+        <div class="flex calling-container relative" @dblclick="fullScreen()">
           <video
             id="otherVideo"
             v-show="!message"
@@ -125,14 +125,14 @@
           />
           <img
             v-if="!audio && isCallOn"
-            @click="toggleAudio(true)"
+            @click="audio = true"
             src="/mic_on.svg"
             class="h-10 w-10 cursor-pointer mr-2"
             alt="mute"
           />
           <img
             v-if="audio && isCallOn"
-            @click="toggleAudio(false)"
+            @click="audio = false"
             src="/mic_off.svg"
             class="h-10 w-10 cursor-pointer mr-2"
             alt="mute"
@@ -145,14 +145,14 @@
           />
           <img
             v-if="!video && isCallOn"
-            @click="toggleVideo(true)"
+            @click="video = true"
             src="/camera_on.svg"
             class="h-10 w-10 cursor-pointer"
             alt="end call"
           />
           <img
             v-if="video && isCallOn"
-            @click="toggleVideo(false)"
+            @click="video = false"
             src="/camera_off.svg"
             class="h-10 w-10 cursor-pointer"
             alt="end call"
@@ -178,6 +178,7 @@
 <script>
 import AppLayout from "@/Layouts/AppLayout";
 import Modal from "@/Jetstream/Modal";
+
 export default {
   props: ["users", "user"],
 
@@ -185,9 +186,7 @@ export default {
     return {
       servers: {
         iceServers: [
-          {
-            urls: ["stun:bn-turn1.xirsys.com"],
-          },
+          { urls: ["stun:bn-turn1.xirsys.com"] },
           {
             username:
               "LpTQzzNnOhyCNV2c-XzFWdQLfX9rjGUb_8A9FR82F59dG-y2bjDkk8hIxh5aEboqAAAAAGHaoB1rYXZpbg==",
@@ -202,6 +201,8 @@ export default {
             ],
           },
         ],
+        iceTransportPolicy: "relay",
+        iceCandidatePoolSize: 0,
       },
       PC: null,
       localStream: null,
@@ -217,6 +218,7 @@ export default {
       senderTrack: null,
       duration: null,
       interval: null,
+      cadidates: [],
     };
   },
   components: {
@@ -226,7 +228,8 @@ export default {
 
   methods: {
     async setupCall() {
-      if (this.PC.connectionState == "closed") {
+      const conState = this.PC.connectionState;
+      if (conState === "closed") {
         this.PC = new RTCPeerConnection(this.servers);
       }
 
@@ -247,11 +250,10 @@ export default {
 
       // Pull tracks from remote stream, add to video stream
       this.PC.ontrack = (event) => {
-        if (event.streams) {
-          event.streams[0].getTracks().forEach((track) => {
-            this.remoteStream.addTrack(track);
-          });
-        }
+        if (!event.streams.length) return;
+        event.streams[0].getTracks().forEach((track) => {
+          this.remoteStream.addTrack(track);
+        });
       };
 
       let video = document.getElementById("myVideo");
@@ -262,7 +264,7 @@ export default {
 
       //get latest ice candidate and sent to other party
       this.PC.onicecandidate = (event) => {
-        if (event.candidate) {
+        if (event.candidate !== null || event.candidate !== undefined) {
           axios.post(route("handshake"), {
             senderId: this.user.id,
             reciverId: this.caller.id,
@@ -277,30 +279,22 @@ export default {
     },
     async startCall(user) {
       this.caller = user;
-
-      if (user.id == this.user.id) {
+      if (user.id === this.user.id) {
         alert("can't call to own");
         return false;
       }
       this.isCallOn = true;
       this.ModelShow = false;
-
-      await this.setupCall();
-
-      // Create offer
-      const offerDescription = await this.PC.createOffer();
-      await this.PC.setLocalDescription(offerDescription);
-
       this.message = "Calling...";
-      const offer = {
-        sdp: offerDescription.sdp,
-        type: offerDescription.type,
-      };
+
       axios.post(route("handshake"), {
         senderId: this.user.id,
         reciverId: this.caller.id,
         _token: csrfToken,
-        data: JSON.stringify(offer),
+        data: JSON.stringify({
+          type: "incoming-call",
+          data: this.user,
+        }),
       });
     },
 
@@ -323,27 +317,17 @@ export default {
       this.message = null;
       this.isCallOn = true;
       this.ModelShow = false;
-
       await this.setupCall();
 
-      // set offer as local and generate answer
-      const offerDescription = this.offerData;
-      await this.PC.setRemoteDescription(
-        new RTCSessionDescription(offerDescription)
-      );
+      // Create offer
+      const offerDescription = await this.PC.createOffer();
+      await this.PC.setLocalDescription(offerDescription);
 
-      const answerDescription = await this.PC.createAnswer();
-      await this.PC.setLocalDescription(answerDescription);
-
-      const answer = {
-        type: answerDescription.type,
-        sdp: answerDescription.sdp,
-      };
       axios.post(route("handshake"), {
         senderId: this.user.id,
         reciverId: this.caller.id,
         _token: csrfToken,
-        data: JSON.stringify(answer),
+        data: JSON.stringify(offerDescription),
       });
     },
 
@@ -351,21 +335,19 @@ export default {
       this.isCallOn = false;
       this.ModelShow = false;
       this.message = null;
+      this.cadidates = [];
 
       if (this.localStream) {
         this.localStream.getTracks().forEach(function (track) {
           track.stop();
         });
       }
-
       if (this.remoteStream) {
         this.remoteStream.getTracks().forEach(function (track) {
           track.stop();
         });
       }
-
       clearInterval(this.interval);
-
       this.PC.close();
 
       if (shouldNotify) {
@@ -387,10 +369,26 @@ export default {
       }
     },
 
-    setOffer(data, offerData) {
-      this.caller = data.caller;
-      this.offerData = offerData;
-      this.ModelShow = true;
+    async setOffer(data, offerData) {
+      this.message = null;
+
+      await this.setupCall();
+
+      const offerDescription = new RTCSessionDescription(offerData);
+      await this.PC.setRemoteDescription(
+        new RTCSessionDescription(offerDescription)
+      );
+
+      // Create answer
+      const answerDescription = await this.PC.createAnswer();
+      await this.PC.setLocalDescription(answerDescription);
+
+      axios.post(route("handshake"), {
+        senderId: this.user.id,
+        reciverId: this.caller.id,
+        _token: csrfToken,
+        data: JSON.stringify(answerDescription),
+      });
     },
     async setAnswer(answerData) {
       this.message = null;
@@ -398,9 +396,13 @@ export default {
       this.PC.setRemoteDescription(answerDescription);
     },
     setCandidate(candidateData) {
-      candidateData.data
-        ? this.PC.addIceCandidate(new RTCIceCandidate(candidateData.data))
-        : "";
+      if (candidateData.data === null || candidateData.data === undefined) {
+        return;
+      }
+      const candidate = new RTCIceCandidate(candidateData.data);
+      this.PC.addIceCandidate(candidate).catch((e) =>
+        console.log("candidate-error", e)
+      );
     },
 
     setOnlineUsers() {
@@ -427,16 +429,18 @@ export default {
         pad(((s % 6e4) / 1000) | 0)
       );
     },
+
     handShakeing() {
       Echo.channel(`handshake.${this.user.id}`).listen(
         "SendHandShake",
         (data) => {
           const handShakeData = JSON.parse(data.data);
 
-          //second person got
-          if (handShakeData.type == "offer") {
-            this.setOffer(data, handShakeData);
+          if (handShakeData.type === "incoming-call") {
+            this.caller = handShakeData.data;
+            this.ModelShow = true;
             this.message = "Ringing...";
+
             // sent back offer get to show ringing
             axios.post(route("handshake"), {
               senderId: this.user.id,
@@ -444,33 +448,44 @@ export default {
               _token: csrfToken,
               data: JSON.stringify({
                 type: "ring",
+                data: this.user,
               }),
             });
           }
 
-          // 1st person got
+          //1 person got when 2nd person answer call
+          if (handShakeData.type == "offer") {
+            console.log("offer-received");
+            this.setOffer(data, handShakeData);
+          }
+
+          // 2st person got
           if (handShakeData.type == "answer") {
+            console.log("answer-received");
             this.setAnswer(handShakeData);
           }
 
           //second person got
           if (handShakeData.type == "candidate") {
+            console.log("candidate-received");
             this.setCandidate(handShakeData);
-            console.log("candidate", handShakeData);
           }
 
           //1st person got
           if (handShakeData.type == "reject") {
+            console.log("rejected-received");
             this.message = "Rejected.";
           }
 
           //anyone can get
           if (handShakeData.type == "endCall") {
+            console.log("endCall-received");
             this.endCall();
           }
 
           //anyone can get
           if (handShakeData.type == "ring") {
+            console.log("ring-received");
             this.message = "Ringing...";
           }
         }
@@ -479,23 +494,6 @@ export default {
     fullScreen() {
       const element = document.querySelector(".calling-container");
       element.requestFullscreen();
-    },
-    toggleVideo(status) {
-      this.video = status;
-      const videoTrack = this.localStream
-        .getTracks()
-        .find((track) => track.kind === "video");
-
-      videoTrack.enabled = status;
-    },
-    toggleAudio(status) {
-      this.audio = status;
-
-      const videoTrack = this.localStream
-        .getTracks()
-        .find((track) => track.kind === "audio");
-
-      videoTrack.enabled = status;
     },
     shareScreen() {
       navigator.mediaDevices
@@ -517,12 +515,32 @@ export default {
           };
         });
     },
+    keyBind(e) {
+      if (e.keyCode == 70) {
+        // F button
+        this.fullScreen();
+      }
+      if (e.keyCode == 77) {
+        // M button
+        this.audio = !this.audio;
+      }
+      if (e.keyCode == 86) {
+        // V button
+        this.video = !this.video;
+      }
+      if (e.keyCode == 83) {
+        // S button
+        this.shareScreen();
+      }
+    },
   },
 
   mounted() {
     this.PC = new RTCPeerConnection(this.servers);
     this.setOnlineUsers();
     this.handShakeing();
+    window.addEventListener("keyup", this.keyBind);
+
     this.PC.onconnectionstatechange = (d) => {
       console.log("this.PC.iceConnectionState", this.PC.iceConnectionState);
       switch (this.PC.iceConnectionState) {
@@ -532,12 +550,9 @@ export default {
           this.interval = setInterval(function () {
             let endTime = new Date().getTime();
             self.duration = endTime - startTime;
-            console.log("duration [ms] = " + (endTime - startTime));
           }, 1000);
-
           console.log("connected..........");
           break;
-
         case "disconnected":
         case "failed":
           this.endCall(true);
@@ -545,15 +560,12 @@ export default {
             clearInterval(this.interval);
           }
           console.log("disconnected..........");
-
           break;
-
         case "closed":
           this.endCall(true);
           break;
       }
     };
-
     this.PC.onsignalingstatechange = (d) => {
       switch (this.PC.signalingState) {
         case "closed":
@@ -563,10 +575,13 @@ export default {
       }
     };
   },
+  beforeDestroy: function () {
+    window.removeEventListener("keyup", this.keyBind);
+  },
   watch: {
     message: (val) => {
       const audio = document.getElementById("ringtone");
-      if (val == "Ringing...") {
+      if (val === "Ringing...") {
         audio.play();
       } else {
         audio.pause();
@@ -578,14 +593,32 @@ export default {
         window.onbeforeunload = function () {
           return "are you sure you want to leave ?.";
         };
+      } else {
+        window.onbeforeunload = function () {
+          return null;
+        };
       }
+    },
+    video: function (val) {
+      const videoTrack = this.localStream
+        .getTracks()
+        .find((track) => track.kind === "video");
+
+      videoTrack.enabled = val;
+    },
+    audio: function (val) {
+      const audioTrack = this.localStream
+        .getTracks()
+        .find((track) => track.kind === "audio");
+
+      audioTrack.enabled = val;
     },
   },
 };
 </script>
 
 
-<style  scoped>
+<style scoped>
 .adjust-margin {
   margin-left: -3px;
 }
@@ -601,6 +634,7 @@ export default {
   bottom: 0px;
   -webkit-animation: pulse-animation 2s infinite linear;
 }
+
 @-webkit-keyframes pulse-animation {
   0% {
     -webkit-transform: scale(1);
@@ -623,6 +657,7 @@ export default {
   left: 35%;
   bottom: 3%;
 }
+
 @media only screen and (max-width: 780px) {
   .controller {
     left: 30%;
