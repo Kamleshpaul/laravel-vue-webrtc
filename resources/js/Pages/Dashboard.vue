@@ -6,13 +6,13 @@
       </h2>
     </template>
 
-    <audio hidden id="ringtone" src="/skype_phone.mp3"></audio>
+    <audio hidden id="ringtone" src="/skype_phone.mp3" loop></audio>
     <div class="py-12">
       <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
         <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
           <div class="p-5">
             <h1>Users</h1>
-            <ul class="flex p-2">
+            <ul class="flex flex-wrap p-2 justify-center items-center">
               <li
                 v-for="row in users"
                 v-show="row.id != user.id"
@@ -26,17 +26,30 @@
                   text-white
                   relative
                   cursor-pointer
+                  flex
+                  justify-center
+                  items-center
                 "
                 @click="startCall(row)"
               >
                 <span
-                  class="absolute top-3 left-6 font-bold text-3xl adjust-margin"
-                  >{{ row.name.charAt(0) }}
-                </span>
-                <span
                   class="indicator online"
                   v-show="onlineUsers.filter((x) => row.id === x).length"
                 ></span>
+
+                <p
+                  class="
+                    flex
+                    justify-center
+                    items-center
+                    text-center
+                    font-bold
+                    text-center
+                  "
+                  style="font-size: 10px"
+                >
+                  {{ row.name }}
+                </p>
               </li>
             </ul>
           </div>
@@ -89,18 +102,20 @@
       </div>
     </Modal>
 
-    <Modal :show="isCallOn">
-      <div class="p-5">
-        <div class="flex calling-container relative">
-          <h3>Duration: {{ msToTime(duration) }}</h3>
-        </div>
-        <div class="flex calling-container relative" @dblclick="fullScreen()">
+    <Modal :show="isCallOn" class="">
+      <div class="p-5 target-full-screen flex justify-center items-center">
+        <div
+          class="flex calling-container relative justify-center items-center"
+          @dblclick="fullScreen()"
+        >
           <video
             id="otherVideo"
             v-show="!message"
             playsinline
             class="relative rounded"
             autoplay
+            width="1280"
+            height="720"
           ></video>
           <video
             v-show="!message"
@@ -108,68 +123,54 @@
             playsinline
             autoplay
             muted
-            class="bg-green absolute bottom-5 right-5 z-20 rounded h-1/5"
+            class="
+              bg-green
+              absolute
+              bottom-5
+              right-5
+              z-20
+              rounded-lg
+              h-1/5
+              cursor-pointer
+            "
           ></video>
-          <div v-show="message">
+          <div v-if="message" class="py-2 w-100">
             <p class="p-3">{{ message }}</p>
           </div>
         </div>
 
-        <div class="absolute flex controller">
-          <img
-            v-if="isCallOn"
-            @click="shareScreen"
-            src="/share.svg"
-            class="h-10 w-10 cursor-pointer mr-2"
-            alt="mute"
-          />
-          <img
-            v-if="!audio && isCallOn"
-            @click="audio = true"
-            src="/mic_on.svg"
-            class="h-10 w-10 cursor-pointer mr-2"
-            alt="mute"
-          />
-          <img
-            v-if="audio && isCallOn"
-            @click="audio = false"
-            src="/mic_off.svg"
-            class="h-10 w-10 cursor-pointer mr-2"
-            alt="mute"
-          />
-          <img
-            @click="endCall(true)"
-            src="/end-call.svg"
-            class="h-10 w-10 cursor-pointer mr-2"
-            alt="end call"
-          />
-          <img
-            v-if="!video && isCallOn"
-            @click="video = true"
-            src="/camera_on.svg"
-            class="h-10 w-10 cursor-pointer"
-            alt="end call"
-          />
-          <img
-            v-if="video && isCallOn"
-            @click="video = false"
-            src="/camera_off.svg"
-            class="h-10 w-10 cursor-pointer"
-            alt="end call"
-          />
+        <div class="video-call-actions duration" v-if="!message">
+          <h3 class="px-2">{{ msToTime(duration) }}</h3>
         </div>
+        <div class="video-call-actions">
+          <button
+            v-if="!message"
+            :class="`video-action-button ${audio ? 'mic-active' : 'mic'} `"
+            @click="audio = !audio"
+          ></button>
 
-        <i
-          class="
-            bi bi-arrows-fullscreen
-            absolute
-            top-1
-            right-1
-            shadow-xl
-            cursor-pointer
-          "
-          @click="fullScreen()"
-        ></i>
+          <button
+            v-if="!message"
+            :class="`video-action-button ${video ? 'camera-active' : 'camera'}`"
+            @click="video = !video"
+          ></button>
+
+          <button class="video-action-button endcall" @click="endCall">
+            End
+          </button>
+
+          <button
+            v-if="!message"
+            class="video-action-button full-screen"
+            @click="fullScreen"
+          ></button>
+
+          <button
+            v-if="!message"
+            class="video-action-button screen"
+            @click="shareScreen"
+          ></button>
+        </div>
       </div>
     </Modal>
   </app-layout>
@@ -201,8 +202,6 @@ export default {
             ],
           },
         ],
-        iceTransportPolicy: "relay",
-        iceCandidatePoolSize: 0,
       },
       PC: null,
       localStream: null,
@@ -218,7 +217,6 @@ export default {
       senderTrack: null,
       duration: null,
       interval: null,
-      cadidates: [],
     };
   },
   components: {
@@ -233,14 +231,7 @@ export default {
         this.PC = new RTCPeerConnection(this.servers);
       }
 
-      try {
-        this.localStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-      } catch (error) {
-        alert("Web cam access denied.");
-      }
+      this.localStream = await this.createVideoStream();
       this.remoteStream = new MediaStream();
 
       // Push tracks from local stream to peer connection
@@ -314,7 +305,7 @@ export default {
     },
 
     async answerCall() {
-      this.message = null;
+      this.message = "Connecting...";
       this.isCallOn = true;
       this.ModelShow = false;
       await this.setupCall();
@@ -335,7 +326,7 @@ export default {
       this.isCallOn = false;
       this.ModelShow = false;
       this.message = null;
-      this.cadidates = [];
+      this.duration = null;
 
       if (this.localStream) {
         this.localStream.getTracks().forEach(function (track) {
@@ -370,7 +361,7 @@ export default {
     },
 
     async setOffer(data, offerData) {
-      this.message = null;
+      this.message = "Connecting...";
 
       await this.setupCall();
 
@@ -391,7 +382,6 @@ export default {
       });
     },
     async setAnswer(answerData) {
-      this.message = null;
       const answerDescription = new RTCSessionDescription(answerData);
       this.PC.setRemoteDescription(answerDescription);
     },
@@ -441,16 +431,43 @@ export default {
             this.ModelShow = true;
             this.message = "Ringing...";
 
-            // sent back offer get to show ringing
-            axios.post(route("handshake"), {
-              senderId: this.user.id,
-              reciverId: this.caller.id,
-              _token: csrfToken,
-              data: JSON.stringify({
-                type: "ring",
-                data: this.user,
-              }),
-            });
+            if (document.hidden) {
+              const notification = new Notification(
+                `${this.caller.name} is calling you`,
+                {
+                  body: "Click to answer",
+                  icon: "/phone-notification.png",
+                }
+              );
+
+              notification.onclick = () => {
+                this.answerCall();
+                window.parent.parent.focus();
+                notification.close();
+              };
+            }
+
+            if (this.isCallOn) {
+              axios.post(route("handshake"), {
+                senderId: this.user.id,
+                reciverId: this.caller.id,
+                _token: csrfToken,
+                data: JSON.stringify({
+                  type: "in-call",
+                  data: this.user,
+                }),
+              });
+            } else {
+              axios.post(route("handshake"), {
+                senderId: this.user.id,
+                reciverId: this.caller.id,
+                _token: csrfToken,
+                data: JSON.stringify({
+                  type: "ring",
+                  data: this.user,
+                }),
+              });
+            }
           }
 
           //1 person got when 2nd person answer call
@@ -488,12 +505,23 @@ export default {
             console.log("ring-received");
             this.message = "Ringing...";
           }
+
+          //anyone can get
+          if (handShakeData.type == "in-call") {
+            console.log("ring-received");
+            this.message = "Already in call.";
+          }
         }
       );
     },
     fullScreen() {
-      const element = document.querySelector(".calling-container");
-      element.requestFullscreen();
+      const element = document.querySelector(".target-full-screen");
+      const requestFullScreen =
+        element.requestFullscreen ||
+        element.mozRequestFullScreen ||
+        element.webkitRequestFullscreen ||
+        element.msRequestFullscreen;
+      requestFullScreen.call(element);
     },
     shareScreen() {
       navigator.mediaDevices
@@ -533,47 +561,86 @@ export default {
         this.shareScreen();
       }
     },
+    checkState() {
+      this.PC.onconnectionstatechange = (d) => {
+        console.log("this.PC.iceConnectionState", this.PC.iceConnectionState);
+        switch (this.PC.iceConnectionState) {
+          case "connected":
+            this.message = null;
+            $("#myVideo").draggable({
+              containment: "parent",
+            });
+            const startTime = new Date().getTime();
+            const self = this;
+            this.interval = setInterval(function () {
+              let endTime = new Date().getTime();
+              self.duration = endTime - startTime;
+            }, 1000);
+            break;
+          case "disconnected":
+          case "failed":
+            this.endCall(true);
+            if (this.interval) {
+              clearInterval(this.interval);
+            }
+            console.log("disconnected..........");
+            break;
+          case "closed":
+            this.endCall(true);
+            break;
+        }
+      };
+      this.PC.onsignalingstatechange = (d) => {
+        switch (this.PC.signalingState) {
+          case "closed":
+            console.log("Signalling state is 'closed'");
+            console.log("Other user Left");
+            break;
+        }
+      };
+    },
+    async createVideoStream() {
+      return await navigator.mediaDevices
+        .getUserMedia({
+          video: {
+            width: {
+              min: 1280,
+              max: 1920,
+            },
+            height: {
+              min: 720,
+              max: 1080,
+            },
+            frameRate: 30,
+          },
+          audio: {
+            noiseSuppression: true,
+          },
+        })
+        .then((stream) => {
+          return stream;
+        })
+        .catch((err) => {
+          console.log(err);
+          return null;
+          alert("Web cam access denied.");
+        });
+    },
   },
 
   mounted() {
+    // ask to notification permission
+    Notification.requestPermission();
+
     this.PC = new RTCPeerConnection(this.servers);
     this.setOnlineUsers();
     this.handShakeing();
     window.addEventListener("keyup", this.keyBind);
 
-    this.PC.onconnectionstatechange = (d) => {
-      console.log("this.PC.iceConnectionState", this.PC.iceConnectionState);
-      switch (this.PC.iceConnectionState) {
-        case "connected":
-          const startTime = new Date().getTime();
-          const self = this;
-          this.interval = setInterval(function () {
-            let endTime = new Date().getTime();
-            self.duration = endTime - startTime;
-          }, 1000);
-          console.log("connected..........");
-          break;
-        case "disconnected":
-        case "failed":
-          this.endCall(true);
-          if (this.interval) {
-            clearInterval(this.interval);
-          }
-          console.log("disconnected..........");
-          break;
-        case "closed":
-          this.endCall(true);
-          break;
-      }
-    };
-    this.PC.onsignalingstatechange = (d) => {
-      switch (this.PC.signalingState) {
-        case "closed":
-          console.log("Signalling state is 'closed'");
-          console.log("Other user Left");
-          break;
-      }
-    };
+    const self = this;
+    setInterval(() => {
+      self.checkState();
+    }, 2000);
   },
   beforeDestroy: function () {
     window.removeEventListener("keyup", this.keyBind);
@@ -589,8 +656,10 @@ export default {
       }
     },
     isCallOn: (val) => {
+      const self = this;
       if (val) {
         window.onbeforeunload = function () {
+          self.endCall();
           return "are you sure you want to leave ?.";
         };
       } else {
@@ -599,19 +668,11 @@ export default {
         };
       }
     },
-    video: function (val) {
-      const videoTrack = this.localStream
-        .getTracks()
-        .find((track) => track.kind === "video");
-
-      videoTrack.enabled = val;
+    video: async function (val) {
+      this.localStream.getVideoTracks()[0].enabled = val;
     },
     audio: function (val) {
-      const audioTrack = this.localStream
-        .getTracks()
-        .find((track) => track.kind === "audio");
-
-      audioTrack.enabled = val;
+      this.localStream.getAudioTracks()[0].enabled = val;
     },
   },
 };
@@ -654,13 +715,91 @@ export default {
 }
 
 .controller {
-  left: 35%;
+  width: 100%;
   bottom: 3%;
+  justify-content: center;
 }
 
-@media only screen and (max-width: 780px) {
-  .controller {
-    left: 30%;
-  }
+.video-call-actions {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  bottom: 25px;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
+  z-index: 999;
+}
+
+.video-action-button {
+  background-repeat: no-repeat;
+  background-size: 24px;
+  border: none;
+  height: 48px;
+  margin: 0 8px;
+  border-radius: 8px;
+  width: 48px;
+  cursor: pointer;
+  outline: none;
+  background-color: rgb(255 255 255 / 80%);
+}
+
+.video-action-button.mic {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB2ZXJzaW9uPSIxLjIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDUxMiA1MTIiIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIj4KCTx0aXRsZT5taWNyb3Bob25lLXN2ZzwvdGl0bGU+Cgk8c3R5bGU+CgkJLnMwIHsgZmlsbDogIzAwMDAwMCB9IAoJCS5zMSB7IGZpbGw6ICMwMDAwMDA7c3Ryb2tlOiAjMDAwMDAwO3N0cm9rZS1saW5lY2FwOiByb3VuZDtzdHJva2UtbGluZWpvaW46IHJvdW5kO3N0cm9rZS13aWR0aDogMjMgfSAKCTwvc3R5bGU+Cgk8ZyBpZD0iTGF5ZXIiPgoJCTxwYXRoIGlkPSJMYXllciIgZmlsbC1ydWxlPSJldmVub2RkIiBjbGFzcz0iczAiIGQ9Im0zMDYuMSA0Ni4yYzE2LjQgMTAuMSAzMS44IDI4LjIgMzguOCA0NS45YzYuOSAxNy4yIDYuNiAxMy4xIDYuNiA5OS45YzAgODYuMSAwLjIgODIuNy02LjEgOTguOWMtOS45IDI0LjktMzEuNSA0Ni4xLTU2LjUgNTUuMmMtMjIuNyA4LjMtNDguMyA3LjYtNzAuOC0yYy0yMi4yLTkuNC00Mi4xLTI5LjgtNTEtNTIuMmMtNi45LTE3LjItNi42LTEzLjEtNi42LTk5LjljMC03MS43IDAuMi03OS4xIDEuOC04NS40YzQuNi0xOC4yIDEyLjgtMzIuNyAyNS43LTQ1LjdjMTQuOC0xNSAzMS4yLTIzLjggNTEuMy0yNy40YzIyLjMtNC4xIDQ3LjIgMC43IDY2LjggMTIuN3ptLTEwNy4xIDUzLjJjLTcgMTQtNyAxMy41LTcgOTIuNmMwIDc5LjMgMCA3OC42IDcuMiA5M2M3LjMgMTQuNiAyMC40IDI1LjggMzcgMzEuOGM2LjMgMi4yIDguOSAyLjYgMTkuMyAyLjdjOS43IDAgMTMuMy0wLjQgMTktMi4yYzE5LjktNi4zIDM2LjUtMjIuOSA0Mi44LTQyLjhjMi4yLTcgMi4yLTcuMyAyLjItODIuNWMwLTc1LjIgMC03NS41LTIuMi04Mi41Yy02LjktMjEuNy0yNi4yLTM5LjUtNDcuOC00NGMtMjguNy02LTU3LjMgNy44LTcwLjUgMzMuOXoiIC8+CgkJPHBhdGggaWQ9IkxheWVyIiBjbGFzcz0iczAiIGQ9Im0xMjAuOCAyMjYuN2M2LjQgNC44IDYuNiA1LjcgNy40IDI3LjFjMC43IDIxLjMgMi4xIDMwLjIgNyA0NC4yYzYuNiAxOC44IDE2IDMzLjUgMzAuNyA0OC4xYzE4LjMgMTguNCAzNy42IDI5IDYzLjUgMzUuMWMxMi40IDIuOSAzOSAzLjEgNTEuNiAwLjRjMjUuNy01LjYgNDYuNi0xNi45IDY1LjEtMzUuNWMxNC43LTE0LjYgMjQuMS0yOS4zIDMwLjctNDguMWM0LjktMTQgNi4zLTIyLjkgNy00NC4yYzAuNi0xNy43IDAuOS0xOS45IDIuOC0yMi40YzMuOS01LjMgNy4xLTYuOSAxMy40LTYuOWM2LjMgMCA5LjUgMS42IDEzLjQgNi45YzIgMi42IDIuMSA0LjEgMi4xIDIyLjRjLTAuMSAyMi45LTEuNSAzMy03LjYgNTEuNWMtMTguNSA1Ni42LTY3LjEgOTguNy0xMjUuMSAxMDguNGwtMTAuOCAxLjd2MTYuM3YxNi4ybDE4LjkgMC4zYzE3LjMgMC4zIDE5LjIgMC41IDIxLjcgMi40YzUuMyAzLjkgNi45IDcuMSA2LjkgMTMuNGMwIDYuMy0xLjYgOS41LTYuOSAxMy40Yy0yLjcgMi4xLTMuOCAyLjEtNTYuNiAyLjFjLTUyLjggMC01My45IDAtNTYuNi0yLjFjLTUuMy0zLjktNi45LTcuMS02LjktMTMuNGMwLTYuMyAxLjYtOS41IDYuOS0xMy40YzIuNS0xLjkgNC40LTIuMSAyMS43LTIuNGwxOC45LTAuM3YtMTYuMnYtMTYuM2wtMTAuNy0xLjhjLTYtMS0xNi4xLTMuNS0yMi41LTUuNmMtNTUuNi0xOC4zLTk2LjItNjQtMTA3LjgtMTIxLjZjLTIuMi0xMC42LTMuOS00My0yLjYtNDkuN2MwLjgtNC40IDQuOS05LjUgOS4xLTExLjNjNC0xLjkgMTItMS4yIDE1LjMgMS4zeiIgLz4KCQk8cGF0aCBpZD0iU2hhcGUgMSIgY2xhc3M9InMxIiBkPSJtNDI4LjcgMzUuNGwzLjUgMy4ybC0zNjIuOSAzOTdsLTMuNC0zLjJ6IiAvPgoJPC9nPgo8L3N2Zz4=");
+  background-position: center;
+}
+
+.video-action-button.mic-active {
+  background-image: url("data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBzdGFuZGFsb25lPSJubyI/Pgo8IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDIwMDEwOTA0Ly9FTiIKICJodHRwOi8vd3d3LnczLm9yZy9UUi8yMDAxL1JFQy1TVkctMjAwMTA5MDQvRFREL3N2ZzEwLmR0ZCI+CjxzdmcgdmVyc2lvbj0iMS4wIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciCiB3aWR0aD0iNTEyLjAwMDAwMHB0IiBoZWlnaHQ9IjUxMi4wMDAwMDBwdCIgdmlld0JveD0iMCAwIDUxMi4wMDAwMDAgNTEyLjAwMDAwMCIKIHByZXNlcnZlQXNwZWN0UmF0aW89InhNaWRZTWlkIG1lZXQiPgoKPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC4wMDAwMDAsNTEyLjAwMDAwMCkgc2NhbGUoMC4xMDAwMDAsLTAuMTAwMDAwKSIKZmlsbD0iIzAwMDAwMCIgc3Ryb2tlPSJub25lIj4KPHBhdGggZD0iTTIzOTMgNDc4NSBjLTIwMSAtMzYgLTM2NSAtMTI0IC01MTMgLTI3NCAtMTI5IC0xMzAgLTIxMSAtMjc1IC0yNTcKLTQ1NyAtMTYgLTYzIC0xOCAtMTM3IC0xOCAtODU0IDAgLTg2OCAtMyAtODI3IDY2IC05OTkgODkgLTIyNCAyODggLTQyOCA1MTAKLTUyMiAyMjUgLTk2IDQ4MSAtMTAzIDcwOCAtMjAgMjUwIDkxIDQ2NiAzMDMgNTY1IDU1MiA2MyAxNjIgNjEgMTI4IDYxIDk4OSAwCjg2OCAzIDgyNyAtNjYgOTk5IC03MCAxNzcgLTIyNCAzNTggLTM4OCA0NTkgLTE5NiAxMjAgLTQ0NSAxNjggLTY2OCAxMjd6Cm0zMDIgLTMyMCBjMjE2IC00NSA0MDkgLTIyMyA0NzggLTQ0MCAyMiAtNzAgMjIgLTczIDIyIC04MjUgMCAtNzUyIDAgLTc1NQotMjIgLTgyNSAtNjMgLTE5OSAtMjI5IC0zNjUgLTQyOCAtNDI4IC01NyAtMTggLTkzIC0yMiAtMTkwIC0yMiAtMTA0IDEgLTEzMAo1IC0xOTMgMjcgLTE2NiA2MCAtMjk3IDE3MiAtMzcwIDMxOCAtNzIgMTQ0IC03MiAxMzcgLTcyIDkzMCAwIDc5MSAwIDc4NiA3MAo5MjYgMTMyIDI2MSA0MTggMzk5IDcwNSAzMzl6Ii8+CjxwYXRoIGQ9Ik0xMDU1IDI4NjYgYy00MiAtMTggLTgzIC02OSAtOTEgLTExMyAtMTMgLTY3IDQgLTM5MSAyNiAtNDk3IDExNgotNTc2IDUyMiAtMTAzMyAxMDc4IC0xMjE2IDY0IC0yMSAxNjUgLTQ2IDIyNSAtNTYgbDEwNyAtMTggMCAtMTYzIDAgLTE2MgotMTg5IC0zIGMtMTczIC0zIC0xOTIgLTUgLTIxNyAtMjQgLTUzIC0zOSAtNjkgLTcxIC02OSAtMTM0IDAgLTYzIDE2IC05NSA2OQotMTM0IDI3IC0yMSAzOCAtMjEgNTY2IC0yMSA1MjggMCA1MzkgMCA1NjYgMjEgNTMgMzkgNjkgNzEgNjkgMTM0IDAgNjMgLTE2Cjk1IC02OSAxMzQgLTI1IDE5IC00NCAyMSAtMjE3IDI0IGwtMTg5IDMgMCAxNjIgMCAxNjMgMTA4IDE3IGM1ODAgOTcgMTA2Ngo1MTggMTI1MSAxMDg0IDYxIDE4NSA3NSAyODYgNzYgNTE1IDAgMTgzIC0xIDE5OCAtMjEgMjI0IC0zOSA1MyAtNzEgNjkgLTEzNAo2OSAtNjMgMCAtOTUgLTE2IC0xMzQgLTY5IC0xOSAtMjUgLTIyIC00NyAtMjggLTIyNCAtNyAtMjEzIC0yMSAtMzAyIC03MAotNDQyIC02NiAtMTg4IC0xNjAgLTMzNSAtMzA3IC00ODEgLTE4NSAtMTg2IC0zOTQgLTI5OSAtNjUxIC0zNTUgLTEyNiAtMjcKLTM5MiAtMjUgLTUxNiA0IC0yNTkgNjEgLTQ1MiAxNjcgLTYzNSAzNTEgLTE0NyAxNDYgLTI0MSAyOTMgLTMwNyA0ODEgLTQ5CjE0MCAtNjMgMjI5IC03MCA0NDIgLTggMjE0IC0xMCAyMjMgLTc0IDI3MSAtMzMgMjUgLTExMyAzMiAtMTUzIDEzeiIvPgo8L2c+Cjwvc3ZnPgo=");
+  background-position: center;
+}
+
+.video-action-button.camera {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%232c303a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='feather feather-camera-off' viewBox='0 0 24 24'%3E%3Cpath d='M1 1l22 22M21 21H3a2 2 0 01-2-2V8a2 2 0 012-2h3m3-3h6l2 3h4a2 2 0 012 2v9.34m-7.72-2.06a4 4 0 11-5.56-5.56'/%3E%3C/svg%3E%0A");
+  background-position: center;
+}
+
+.video-action-button.camera-active {
+  background-image: url("data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBzdGFuZGFsb25lPSJubyI/Pgo8IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDIwMDEwOTA0Ly9FTiIKICJodHRwOi8vd3d3LnczLm9yZy9UUi8yMDAxL1JFQy1TVkctMjAwMTA5MDQvRFREL3N2ZzEwLmR0ZCI+CjxzdmcgdmVyc2lvbj0iMS4wIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciCiB3aWR0aD0iNTEyLjAwMDAwMHB0IiBoZWlnaHQ9IjUxMi4wMDAwMDBwdCIgdmlld0JveD0iMCAwIDUxMi4wMDAwMDAgNTEyLjAwMDAwMCIKIHByZXNlcnZlQXNwZWN0UmF0aW89InhNaWRZTWlkIG1lZXQiPgoKPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC4wMDAwMDAsNTEyLjAwMDAwMCkgc2NhbGUoMC4xMDAwMDAsLTAuMTAwMDAwKSIKZmlsbD0iIzAwMDAwMCIgc3Ryb2tlPSJub25lIj4KPHBhdGggZD0iTTM5MiA0NjEwIGMtNDUgLTI4IC03NiAtOTggLTY3IC0xNTEgOSAtNTMgNTggLTEwNCAxMTQgLTExOSAyOSAtNwoxMDYgLTEwIDIyMCAtOCAxNjIgMyAxNzkgNSAyMTIgMjYgODYgNTMgOTIgMTY5IDE0IDI0MiAtMjYgMjUgLTI4IDI1IC0yNDMgMjgKLTIwNCAyIC0yMTkgMSAtMjUwIC0xOHoiLz4KPHBhdGggZD0iTTE3MjkgNDYwNiBjLTM2IC0xMyAtODYgLTM3IC0xMTAgLTU0IC0yNCAtMTcgLTE1MiAtMTM5IC0yODQgLTI3MgotMTMyIC0xMzMgLTI1MyAtMjQ5IC0yNzAgLTI1OCAtMjYgLTE1IC03NiAtMTggLTM2MCAtMjIgLTMxNyAtNiAtMzMyIC03IC0zOTAKLTI5IC04MSAtMzIgLTEyMyAtNjAgLTE4MiAtMTIwIC01NiAtNTcgLTEwNSAtMTUwIC0xMjIgLTIyOSAtOCAtMzcgLTExIC00NTQKLTExIC0xMzg1IDAgLTExNDkgMiAtMTM0MSAxNSAtMTM5MCA0MiAtMTYzIDE2MSAtMjkwIDMxNiAtMzM4IDU5IC0xOCAxMjkgLTE5CjIyMjkgLTE5IDIxMDAgMCAyMTcwIDEgMjIyOSAxOSAxNTUgNDggMjc0IDE3NSAzMTYgMzM4IDIzIDg3IDIyIDI2OTYgMCAyNzkyCi00MiAxNzcgLTE5MCAzMTcgLTM2OSAzNTAgLTM0IDYgLTE4NCAxMSAtMzQ4IDExIC0yNDUgMCAtMjk0IDIgLTMyMSAxNiAtMTggOQotMTQ5IDEzMiAtMjkyIDI3NCAtMTQzIDE0MSAtMjgwIDI2OSAtMzA1IDI4MyAtMTAzIDU4IC04NiA1NyAtOTE0IDU3IGwtNzYxIDAKLTY2IC0yNHogbTE1NzggLTI4NyBjMTUgLTYgMTQ3IC0xMjkgMjkzIC0yNzQgMzYxIC0zNTggMzMyIC0zNDUgNzY5IC0zNDUgMTY0CjAgMzEyIC01IDMzMSAtMTAgNDEgLTExIDk0IC02MSAxMDkgLTEwMyA4IC0xOSAxMSAtNDQwIDExIC0xMzQ1IDAgLTEyNjMgLTEKLTEzMTkgLTE5IC0xMzU4IC0xMCAtMjMgLTM0IC01MiAtNTIgLTY1IGwtMzQgLTI0IC0yMTU2IDAgLTIxNTYgMCAtMzUgMjcKYy03MyA1NiAtNjkgLTM5IC02NiAxNDM5IGwzIDEzMjYgMjkgMzcgYzU1IDcyIDcyIDc2IDQxMSA3NiAzMTggMCAzNTUgNCA0NTIKNTEgMzUgMTYgMTIxIDk1IDMxMyAyODUgMTQ2IDE0NSAyNzkgMjcwIDI5NSAyNzggMjYgMTQgMTE5IDE2IDc1MiAxNiA0ODcgMAo3MzEgLTMgNzUwIC0xMXoiLz4KPHBhdGggZD0iTTI0MzIgMzUwOSBjLTQ1MCAtNTIgLTgyOSAtMzgyIC05NDkgLTgyNCAtMjUgLTkyIC0yNyAtMTE1IC0yNyAtMjg1CjEgLTIwMyAxMCAtMjU3IDc0IC00MTcgMTI4IC0zMTggNDE1IC01NjkgNzU3IC02NjAgODYgLTIzIDExOCAtMjYgMjY4IC0yNwoxNDUgLTEgMTgzIDMgMjU4IDIyIDUxMSAxMjkgODU2IDU2NCA4NTcgMTA3OCAwIDIwMyAtMzUgMzQ3IC0xMjYgNTI0IC0xNDAKMjcxIC00MDcgNDg0IC03MDIgNTYwIC0xNDMgMzYgLTI3MSA0NSAtNDEwIDI5eiBtMzM0IC0zMTkgYzIyMCAtNTcgNDE4IC0yMTgKNTIwIC00MjUgNjEgLTEyNSA4NCAtMjIyIDg0IC0zNTkgMCAtMjIxIC03MiAtNDA1IC0yMTkgLTU1OSAtMTQ4IC0xNTcgLTMzNQotMjQzIC01NTEgLTI1NCAtMzYzIC0xOSAtNjkwIDIwNSAtODEyIDU1NyAtMzEgOTEgLTMyIDEwMiAtMzMgMjQ1IDAgMTY5IDExCjIyNCA3MCAzNTMgOTQgMjAyIDI3NCAzNTkgNDk3IDQzMSAxMzMgNDQgMjk5IDQ4IDQ0NCAxMXoiLz4KPC9nPgo8L3N2Zz4K");
+  background-position: center;
+}
+
+.video-action-button.full-screen {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%232c303a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='feather feather-maximize' viewBox='0 0 24 24'%3E%3Cpath d='M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3'/%3E%3C/svg%3E%0A");
+  background-position: center;
+}
+
+.video-action-button.endcall {
+  color: #ff1932;
+  width: auto;
+  font-size: 14px;
+  padding-left: 42px;
+  padding-right: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff1932' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' class='feather feather-phone-missed'%3E%3Cline x1='23' y1='1' x2='17' y2='7'/%3E%3Cline x1='17' y1='1' x2='23' y2='7'/%3E%3Cpath d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z'/%3E%3C/svg%3E");
+  background-size: 20px;
+  background-position: center left 12px;
+}
+
+.video-action-button.screen {
+  background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0Ij48cGF0aCBmaWxsPSJub25lIiBkPSJNMCAwaDI0djI0SDBWMHoiLz48cGF0aCBkPSJNMjAgMThjMS4xIDAgMS45OS0uOSAxLjk5LTJMMjIgNmMwLTEuMTEtLjktMi0yLTJINGMtMS4xMSAwLTIgLjg5LTIgMnYxMGMwIDEuMS44OSAyIDIgMkgwdjJoMjR2LTJoLTR6TTQgMTZWNmgxNnYxMC4wMUw0IDE2em05LTYuODdjLTMuODkuNTQtNS40NCAzLjItNiA1Ljg3IDEuMzktMS44NyAzLjIyLTIuNzIgNi0yLjcydjIuMTlsNC0zLjc0TDEzIDd2Mi4xM3oiLz48L3N2Zz4=");
+  background-position: center;
+}
+
+.duration {
+  bottom: 80px;
+}
+
+.duration h3 {
+  border-radius: 8px;
+  background-color: rgb(255 255 255 / 80%);
+}
+
+.calling-container {
+  width: 100%;
+}
+
+.w-100 {
+  width: 100%;
 }
 </style>
