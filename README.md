@@ -46,9 +46,15 @@ Open [http://localhost:8000](http://localhost:8000) with your browser to see the
 #### Calling
 ![calling](./doc/step-4.png)
 
-#### Call Recivied to other user
+#### Notification Recivied to other user
 ![call reciving](./doc/step-5.png)
 
-#### Both Connected
+#### Call Recivied to other user
 ![call connected](./doc/step-6.png)
+
+#### Connecting to other peer stream
+![call connected](./doc/step-7.png)
+
+#### Both user connected
+![call connected](./doc/step-8.png)
 
