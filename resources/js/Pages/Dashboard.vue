@@ -106,7 +106,7 @@
       <div class="p-5 target-full-screen flex justify-center items-center">
         <div
           class="flex calling-container relative justify-center items-center"
-          @dblclick="fullScreen()"
+          @dblclick="isFullScreen = !isFullScreen"
         >
           <video
             id="otherVideo"
@@ -144,12 +144,14 @@
         </div>
         <div class="video-call-actions">
           <button
+            :disabled="!this.localStream.getAudioTracks()[0]"
             v-if="!message"
             :class="`video-action-button ${audio ? 'mic-active' : 'mic'} `"
             @click="audio = !audio"
           ></button>
 
           <button
+            :disabled="!this.localStream.getVideoTracks()[0]"
             v-if="!message"
             :class="`video-action-button ${video ? 'camera-active' : 'camera'}`"
             @click="video = !video"
@@ -161,8 +163,10 @@
 
           <button
             v-if="!message"
-            class="video-action-button full-screen"
-            @click="fullScreen"
+            :class="`video-action-button ${
+              isFullScreen ? 'full-screen-active' : 'full-screen'
+            }`"
+            @click="isFullScreen = !isFullScreen"
           ></button>
 
           <button
@@ -217,6 +221,7 @@ export default {
       senderTrack: null,
       duration: null,
       interval: null,
+      isFullScreen: false,
     };
   },
   components: {
@@ -232,6 +237,22 @@ export default {
       }
 
       this.localStream = await this.createVideoStream();
+      if (this.localStream === null) {
+        this.localStream = await this.createVideoStream(true);
+        if (this.localStream) {
+          alert("No video permission. & switch to audio only");
+        }
+      }
+      if (this.localStream === null) {
+        this.localStream = await this.createVideoStream(false, true);
+        if (this.localStream) {
+          alert("No audio permission. & switch to video only");
+        }
+      }
+      if (this.localStream === null) {
+        alert("Video and Audio permission denied");
+      }
+
       this.remoteStream = new MediaStream();
 
       // Push tracks from local stream to peer connection
@@ -385,11 +406,13 @@ export default {
       const answerDescription = new RTCSessionDescription(answerData);
       this.PC.setRemoteDescription(answerDescription);
     },
+
     setCandidate(candidateData) {
       if (candidateData.data === null || candidateData.data === undefined) {
         return;
       }
       const candidate = new RTCIceCandidate(candidateData.data);
+      console.log("icecandidate:received", candidate);
       this.PC.addIceCandidate(candidate).catch((e) =>
         console.log("candidate-error", e)
       );
@@ -420,13 +443,14 @@ export default {
       );
     },
 
-    handShakeing() {
+    handShaking() {
       Echo.channel(`handshake.${this.user.id}`).listen(
         "SendHandShake",
         (data) => {
           const handShakeData = JSON.parse(data.data);
 
           if (handShakeData.type === "incoming-call") {
+            console.log("incoming-call");
             this.caller = handShakeData.data;
             this.ModelShow = true;
             this.message = "Ringing...";
@@ -514,15 +538,6 @@ export default {
         }
       );
     },
-    fullScreen() {
-      const element = document.querySelector(".target-full-screen");
-      const requestFullScreen =
-        element.requestFullscreen ||
-        element.mozRequestFullScreen ||
-        element.webkitRequestFullscreen ||
-        element.msRequestFullscreen;
-      requestFullScreen.call(element);
-    },
     shareScreen() {
       navigator.mediaDevices
         .getDisplayMedia({ cursor: true })
@@ -544,19 +559,19 @@ export default {
         });
     },
     keyBind(e) {
-      if (e.keyCode == 70) {
+      if (e.keyCode === 70) {
         // F button
-        this.fullScreen();
+        this.isFullScreen = !this.isFullScreen;
       }
-      if (e.keyCode == 77) {
+      if (e.keyCode === 77) {
         // M button
         this.audio = !this.audio;
       }
-      if (e.keyCode == 86) {
+      if (e.keyCode === 86) {
         // V button
         this.video = !this.video;
       }
-      if (e.keyCode == 83) {
+      if (e.keyCode === 83) {
         // S button
         this.shareScreen();
       }
@@ -599,31 +614,45 @@ export default {
         }
       };
     },
-    async createVideoStream() {
-      return await navigator.mediaDevices
-        .getUserMedia({
-          video: {
-            width: {
-              min: 1280,
-              max: 1920,
-            },
-            height: {
-              min: 720,
-              max: 1080,
-            },
-            frameRate: 30,
+    async createVideoStream(isOnlyAudio = false, isOnlyVideo = false) {
+      let constraints = {
+        video: {
+          width: {
+            min: 1280,
+            max: 1920,
           },
+          height: {
+            min: 720,
+            max: 1080,
+          },
+          frameRate: 30,
+        },
+        audio: {
+          noiseSuppression: true,
+        },
+      };
+
+      if (isOnlyAudio) {
+        constraints = {
+          video: false,
           audio: {
             noiseSuppression: true,
           },
-        })
+        };
+      }
+      if (isOnlyVideo) {
+        constraints = {
+          video: true,
+          audio: false,
+        };
+      }
+      return await navigator.mediaDevices
+        .getUserMedia(constraints)
         .then((stream) => {
           return stream;
         })
         .catch((err) => {
-          console.log(err);
           return null;
-          alert("Web cam access denied.");
         });
     },
   },
@@ -634,7 +663,7 @@ export default {
 
     this.PC = new RTCPeerConnection(this.servers);
     this.setOnlineUsers();
-    this.handShakeing();
+    this.handShaking();
     window.addEventListener("keyup", this.keyBind);
 
     const self = this;
@@ -644,6 +673,12 @@ export default {
   },
   beforeDestroy: function () {
     window.removeEventListener("keyup", this.keyBind);
+    window.removeEventListener("keyup", 70);
+    window.removeEventListener("keyup", 77);
+    window.removeEventListener("keyup", 86);
+    window.removeEventListener("keyup", 83);
+    Echo.leave("online-users");
+    Echo.leave(`handshake.${this.user.id}`);
   },
   watch: {
     message: (val) => {
@@ -673,6 +708,24 @@ export default {
     },
     audio: function (val) {
       this.localStream.getAudioTracks()[0].enabled = val;
+    },
+    isFullScreen: function (val) {
+      const element = document.querySelector(".target-full-screen");
+      if (val) {
+        const requestFullScreen =
+          element.requestFullscreen ||
+          element.mozRequestFullScreen ||
+          element.webkitRequestFullscreen ||
+          element.msRequestFullscreen;
+        requestFullScreen.call(element);
+      } else {
+        const requestexitFullScreen =
+          document.exitFullscreen ||
+          document.mozCancelFullScreen ||
+          document.webkitExitFullscreen ||
+          document.msExitFullscreen;
+        requestexitFullScreen.call(document);
+      }
     },
   },
 };
@@ -770,6 +823,11 @@ export default {
   background-position: center;
 }
 
+.video-action-button.full-screen-active {
+  background-image: url("data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBzdGFuZGFsb25lPSJubyI/Pgo8IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDIwMDEwOTA0Ly9FTiIKICJodHRwOi8vd3d3LnczLm9yZy9UUi8yMDAxL1JFQy1TVkctMjAwMTA5MDQvRFREL3N2ZzEwLmR0ZCI+CjxzdmcgdmVyc2lvbj0iMS4wIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciCiB3aWR0aD0iNTEyLjAwMDAwMHB0IiBoZWlnaHQ9IjUxMi4wMDAwMDBwdCIgdmlld0JveD0iMCAwIDUxMi4wMDAwMDAgNTEyLjAwMDAwMCIKIHByZXNlcnZlQXNwZWN0UmF0aW89InhNaWRZTWlkIG1lZXQiPgoKPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMC4wMDAwMDAsNTEyLjAwMDAwMCkgc2NhbGUoMC4xMDAwMDAsLTAuMTAwMDAwKSIKZmlsbD0iIzAwMDAwMCIgc3Ryb2tlPSJub25lIj4KPHBhdGggZD0iTTgwMCAzNzYwIGwwIC01NjAgMTYwIDAgMTYwIDAgMCAyODcgMCAyODggNTAzIC01MDMgNTAyIC01MDIgMTEzCjExMiAxMTIgMTEzIC01MDIgNTAyIC01MDMgNTAzIDI4OCAwIDI4NyAwIDAgMTYwIDAgMTYwIC01NjAgMCAtNTYwIDAgMCAtNTYweiIvPgo8cGF0aCBkPSJNMzIwMCA0MTYwIGwwIC0xNjAgMjg3IDAgMjg4IDAgLTUwMyAtNTAzIC01MDIgLTUwMiAxMTIgLTExMyAxMTMKLTExMiA1MDIgNTAyIDUwMyA1MDMgMCAtMjg4IDAgLTI4NyAxNjAgMCAxNjAgMCAwIDU2MCAwIDU2MCAtNTYwIDAgLTU2MCAwIDAKLTE2MHoiLz4KPHBhdGggZD0iTTE2MjIgMTg0OCBsLTUwMiAtNTAzIDAgMjg4IDAgMjg3IC0xNjAgMCAtMTYwIDAgMCAtNTYwIDAgLTU2MCA1NjAKMCA1NjAgMCAwIDE2MCAwIDE2MCAtMjg3IDAgLTI4OCAwIDUwNSA1MDUgNTA1IDUwNSAtMTEwIDExMCBjLTYwIDYwIC0xMTIgMTEwCi0xMTUgMTEwIC0zIDAgLTIzMSAtMjI2IC01MDggLTUwMnoiLz4KPHBhdGggZD0iTTI4NzUgMjI0MCBsLTExMCAtMTEwIDUwNSAtNTA1IDUwNSAtNTA1IC0yODggMCAtMjg3IDAgMCAtMTYwIDAKLTE2MCA1NjAgMCA1NjAgMCAwIDU2MCAwIDU2MCAtMTYwIDAgLTE2MCAwIDAgLTI4NyAwIC0yODggLTUwMyA1MDMgYy0yNzYgMjc2Ci01MDQgNTAyIC01MDcgNTAyIC0zIDAgLTU1IC01MCAtMTE1IC0xMTB6Ii8+CjwvZz4KPC9zdmc+Cg==");
+  background-position: center;
+}
+
 .video-action-button.endcall {
   color: #ff1932;
   width: auto;
@@ -802,4 +860,11 @@ export default {
 .w-100 {
   width: 100%;
 }
+
+button:disabled,
+button[disabled] {
+  background-color: #cccccc;
+}
 </style>
+
+
