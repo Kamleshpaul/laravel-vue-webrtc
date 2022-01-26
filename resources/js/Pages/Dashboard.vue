@@ -102,7 +102,7 @@
       </div>
     </Modal>
 
-    <Modal :show="isCallOn" class="">
+    <Modal :show="isCallOn">
       <div class="p-5 target-full-screen flex justify-center items-center">
         <div
           class="flex calling-container relative justify-center items-center"
@@ -125,6 +125,7 @@
             muted
             class="
               bg-green
+              z-20
               absolute
               bottom-5
               right-5
@@ -144,14 +145,14 @@
         </div>
         <div class="video-call-actions">
           <button
-            :disabled="!this.localStream.getAudioTracks()[0]"
+            :disabled="!this.localStream?.getAudioTracks()[0]"
             v-if="!message"
             :class="`video-action-button ${audio ? 'mic-active' : 'mic'} `"
             @click="audio = !audio"
           ></button>
 
           <button
-            :disabled="!this.localStream.getVideoTracks()[0]"
+            :disabled="!this.localStream?.getVideoTracks()[0]"
             v-if="!message"
             :class="`video-action-button ${video ? 'camera-active' : 'camera'}`"
             @click="video = !video"
@@ -277,6 +278,7 @@ export default {
       //get latest ice candidate and sent to other party
       this.PC.onicecandidate = (event) => {
         if (event.candidate !== null || event.candidate !== undefined) {
+          console.log("icecandidate:send", event.candidate);
           axios.post(route("handshake"), {
             senderId: this.user.id,
             reciverId: this.caller.id,
@@ -582,9 +584,7 @@ export default {
         switch (this.PC.iceConnectionState) {
           case "connected":
             this.message = null;
-            $("#myVideo").draggable({
-              containment: "parent",
-            });
+            this.setDragable();
             const startTime = new Date().getTime();
             const self = this;
             this.interval = setInterval(function () {
@@ -655,6 +655,67 @@ export default {
           return null;
         });
     },
+    setDragable() {
+      const padding = 15;
+      $("#myVideo").draggable({
+        containment: ".calling-container",
+        drag: function () {
+          $(this).css({
+            transition: "none",
+          });
+        },
+        stop: function (e, ui) {
+          const xPos = ui.position.left;
+          const yPos = ui.position.top;
+          const containerHeight = $(".calling-container").height();
+          const containerWidth = $(".calling-container").width();
+          const middleLineX = containerWidth / 2 - $(this).width() / 2;
+          const middleLineY = containerHeight / 2 - $(this).height() / 2;
+
+          if (xPos <= middleLineX && yPos <= middleLineY) {
+            $(this).css({
+              top: padding,
+              left: padding,
+              transition: "all 1s ease",
+            });
+          }
+
+          if (xPos >= middleLineX && yPos <= middleLineY) {
+            $(this).css({
+              top: padding,
+              left: containerWidth - $(this).width() - padding,
+              transition: "all 1s ease",
+            });
+          }
+
+          if (xPos >= middleLineX && yPos >= middleLineY) {
+            $(this).css({
+              top: containerHeight - $(this).height() - padding,
+              left: containerWidth - $(this).width() - padding,
+              transition: "all 1s ease",
+            });
+          }
+
+          if (xPos <= middleLineX && yPos >= middleLineY) {
+            $(this).css({
+              top: containerHeight - $(this).height() - padding,
+              left: padding,
+              transition: "all 1s ease",
+            });
+          }
+        },
+      });
+    },
+    exitHandler() {
+      if (
+        !document.fullscreenElement &&
+        !document.webkitIsFullScreen &&
+        !document.mozFullScreen &&
+        !document.msFullscreenElement
+      ) {
+        this.isFullScreen = false;
+      }
+    },
   },
 
   mounted() {
@@ -665,6 +726,10 @@ export default {
     this.setOnlineUsers();
     this.handShaking();
     window.addEventListener("keyup", this.keyBind);
+    document.addEventListener("fullscreenchange", this.exitHandler);
+    document.addEventListener("webkitfullscreenchange", this.exitHandler);
+    document.addEventListener("mozfullscreenchange", this.exitHandler);
+    document.addEventListener("MSFullscreenChange", this.exitHandler);
 
     const self = this;
     setInterval(() => {
@@ -672,11 +737,14 @@ export default {
     }, 2000);
   },
   beforeDestroy: function () {
-    window.removeEventListener("keyup", this.keyBind);
     window.removeEventListener("keyup", 70);
     window.removeEventListener("keyup", 77);
     window.removeEventListener("keyup", 86);
     window.removeEventListener("keyup", 83);
+    document.removeEventListener("fullscreenchange", this.exitHandler);
+    document.removeEventListener("webkitfullscreenchange", this.exitHandler);
+    document.removeEventListener("mozfullscreenchange", this.exitHandler);
+    document.removeEventListener("MSFullscreenChange", this.exitHandler);
     Echo.leave("online-users");
     Echo.leave(`handshake.${this.user.id}`);
   },
@@ -725,6 +793,7 @@ export default {
           document.webkitExitFullscreen ||
           document.msExitFullscreen;
         requestexitFullScreen.call(document);
+        $("#myVideo").removeAttr("style");
       }
     },
   },
@@ -782,7 +851,7 @@ export default {
   right: 0;
   margin-left: auto;
   margin-right: auto;
-  z-index: 999;
+  z-index: 12;
 }
 
 .video-action-button {
