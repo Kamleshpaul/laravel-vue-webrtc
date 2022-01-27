@@ -9,6 +9,18 @@ This is a one to one video calling app with `Laravel` and `vuejs` using `websock
 - [x] COMPOSER
 - [x] Node.js 12.22.0 or above
 
+## Features
+
+- [x] One to one `video call`
+- [x] Audio `Mute/Unmute` and Video `hide/show`
+- [x] double tag to `full screen`
+- [x] `Screen sharing`
+- [x] `Notification` when recive call
+- [x] Online indicator
+- [ ] Miss Call
+- [ ] feedback from after call finished
+- [x] Retry when switch B/W `network` (mobile network to wifi or if wifi restart call will try to reconnect.)
+
 ## How run the application
 
 - copy `.env.local.example` to `.env.local` file with correct data
