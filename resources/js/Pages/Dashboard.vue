@@ -220,7 +220,8 @@ export default {
       audio: true,
       video: true,
       senderTrack: null,
-      duration: null,
+      startTime: null,
+      endTime: null,
       interval: null,
       isFullScreen: false,
     };
@@ -240,18 +241,9 @@ export default {
       this.localStream = await this.createVideoStream();
       if (this.localStream === null) {
         this.localStream = await this.createVideoStream(true);
-        if (this.localStream) {
-          alert("No video permission. & switch to audio only");
-        }
       }
       if (this.localStream === null) {
         this.localStream = await this.createVideoStream(false, true);
-        if (this.localStream) {
-          alert("No audio permission. & switch to video only");
-        }
-      }
-      if (this.localStream === null) {
-        alert("Video and Audio permission denied");
       }
 
       this.remoteStream = new MediaStream();
@@ -278,7 +270,7 @@ export default {
       //get latest ice candidate and sent to other party
       this.PC.onicecandidate = (event) => {
         if (event.candidate !== null || event.candidate !== undefined) {
-          console.log("icecandidate:send", event.candidate);
+          // console.log("icecandidate:send", event.candidate);
           axios.post(route("handshake"), {
             senderId: this.user.id,
             reciverId: this.caller.id,
@@ -310,6 +302,7 @@ export default {
           data: this.user,
         }),
       });
+      await this.setupCall();
     },
 
     rejectCall() {
@@ -349,7 +342,8 @@ export default {
       this.isCallOn = false;
       this.ModelShow = false;
       this.message = null;
-      this.duration = null;
+      this.startTime = null;
+      this.endTime = null;
 
       if (this.localStream) {
         this.localStream.getTracks().forEach(function (track) {
@@ -384,9 +378,7 @@ export default {
     },
 
     async setOffer(data, offerData) {
-      this.message = "Connecting...";
-
-      await this.setupCall();
+      this.message = null;
 
       const offerDescription = new RTCSessionDescription(offerData);
       await this.PC.setRemoteDescription(
@@ -414,7 +406,7 @@ export default {
         return;
       }
       const candidate = new RTCIceCandidate(candidateData.data);
-      console.log("icecandidate:received", candidate);
+      // console.log('icecandidate:received', candidate);
       this.PC.addIceCandidate(candidate).catch((e) =>
         console.log("candidate-error", e)
       );
@@ -580,36 +572,32 @@ export default {
     },
     checkState() {
       this.PC.onconnectionstatechange = (d) => {
-        console.log("this.PC.iceConnectionState", this.PC.iceConnectionState);
+        console.log("iceConnectionState", this.PC.iceConnectionState);
         switch (this.PC.iceConnectionState) {
           case "connected":
             this.message = null;
-            this.setDragable();
-            const startTime = new Date().getTime();
-            const self = this;
-            this.interval = setInterval(function () {
-              let endTime = new Date().getTime();
-              self.duration = endTime - startTime;
-            }, 1000);
-            break;
-          case "disconnected":
-          case "failed":
-            this.endCall(true);
-            if (this.interval) {
-              clearInterval(this.interval);
+            this.setDraggable();
+            if (!this.startTime) {
+              this.startTime = new Date().getTime();
             }
-            console.log("disconnected..........");
+
             break;
-          case "closed":
-            this.endCall(true);
+          case "failed":
+          case "disconnected":
+            this.restart();
             break;
         }
       };
       this.PC.onsignalingstatechange = (d) => {
+        console.log("signalingState", this.PC.signalingState);
         switch (this.PC.signalingState) {
           case "closed":
-            console.log("Signalling state is 'closed'");
-            console.log("Other user Left");
+            this.endCall(true);
+            if (this.interval) {
+              clearInterval(this.interval);
+            }
+            this.endCall(true);
+
             break;
         }
       };
@@ -655,7 +643,7 @@ export default {
           return null;
         });
     },
-    setDragable() {
+    setDraggable() {
       const padding = 15;
       $("#myVideo").draggable({
         containment: ".calling-container",
@@ -716,11 +704,74 @@ export default {
         this.isFullScreen = false;
       }
     },
+    async checkPermission() {
+      const { state: cameraPermission } = await navigator.permissions.query({
+        name: "camera",
+      });
+      const { state: microphonePermission } = await navigator.permissions.query(
+        { name: "microphone" }
+      );
+      const { state: notificationsPermission } =
+        await navigator.permissions.query({ name: "notifications" });
+
+      if (notificationsPermission !== "granted") {
+        await Notification.requestPermission();
+      }
+      if (
+        cameraPermission === "granted" &&
+        microphonePermission === "granted"
+      ) {
+        return;
+      }
+      let stream = await this.createVideoStream();
+      if (stream === null) {
+        stream = await this.createVideoStream(true);
+        if (stream) {
+          alert("Video is not available switch to audio only mode");
+        }
+      }
+      if (stream === null) {
+        stream = await this.createVideoStream(false, true);
+        if (stream) {
+          alert("Audio is not available switch to video only mode");
+        }
+      }
+
+      if (stream) {
+        stream.getTracks().forEach((track) => {
+          track.stop();
+        });
+      } else {
+        alert("Permission is not granted");
+        document.body.innerHTML =
+          "Your browser does not have video and audio permission";
+      }
+    },
+    async restart() {
+      const offerDescription = await this.PC.createOffer({ iceRestart: true });
+      await this.PC.setLocalDescription(offerDescription);
+      this.message = null;
+      axios.post(route("handshake"), {
+        senderId: this.user.id,
+        reciverId: this.caller.id,
+        _token: csrfToken,
+        data: JSON.stringify(offerDescription),
+      });
+    },
+  },
+
+  computed: {
+    duration: function () {
+      if (this.startTime) {
+        return this.endTime - this.startTime;
+      } else {
+        return null;
+      }
+    },
   },
 
   mounted() {
-    // ask to notification permission
-    Notification.requestPermission();
+    this.checkPermission();
 
     this.PC = new RTCPeerConnection(this.servers);
     this.setOnlineUsers();
@@ -734,7 +785,12 @@ export default {
     const self = this;
     setInterval(() => {
       self.checkState();
-    }, 2000);
+      if (self.startTime) {
+        self.endTime = new Date().getTime();
+      } else {
+        self.endTime = null;
+      }
+    }, 1000);
   },
   beforeDestroy: function () {
     window.removeEventListener("keyup", 70);
@@ -933,6 +989,10 @@ export default {
 button:disabled,
 button[disabled] {
   background-color: #cccccc;
+}
+
+#otherVideo {
+  height: 720px;
 }
 </style>
 
